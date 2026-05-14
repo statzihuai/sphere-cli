@@ -73,7 +73,7 @@ jobs:
           # Install sphere-synth itself without re-resolving deps (everything
           # is already pinned above; avoids pip picking up anonymeter's constraints).
           pip install --no-deps -e "."
-          pip install polars pyarrow
+          pip install polars pyarrow certifi
 
       - name: Build CLI binary
         run: bash build.sh
@@ -120,7 +120,7 @@ jobs:
           # Install sphere-synth itself without re-resolving deps (everything
           # is already pinned above; avoids pip picking up anonymeter's constraints).
           pip install --no-deps -e "."
-          pip install polars pyarrow
+          pip install polars pyarrow certifi
 
       - name: Build CLI binary
         run: bash build.sh
@@ -167,7 +167,7 @@ jobs:
           # Install sphere-synth itself without re-resolving deps (everything
           # is already pinned above; avoids pip picking up anonymeter's constraints).
           pip install --no-deps -e "."
-          pip install polars pyarrow
+          pip install polars pyarrow certifi
 
       - name: Build CLI binary
         run: bash build.sh

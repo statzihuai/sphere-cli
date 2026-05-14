@@ -327,6 +327,26 @@ def _write_license_cache(data: dict) -> None:
     cf.write_text(json.dumps({**data, "cachedAt": time.time()}), encoding="utf-8")
 
 
+def _ssl_context():
+    """Return an SSL context with a valid CA bundle.
+
+    PyInstaller binaries on macOS don't automatically inherit the system cert
+    store.  Try certifi (bundled as a dep of many packages), then the macOS
+    system cert file, then fall back to the default context.
+    """
+    import ssl
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        pass
+    import os
+    for path in ("/etc/ssl/cert.pem", "/etc/ssl/certs/ca-certificates.crt"):
+        if os.path.exists(path):
+            return ssl.create_default_context(cafile=path)
+    return ssl.create_default_context()
+
+
 def _validate_key_online(key: str) -> dict:
     """POST to the Cloudflare Worker. Returns {valid, customer, expiry, error?}."""
     import urllib.request, urllib.error
@@ -338,7 +358,7 @@ def _validate_key_online(key: str) -> dict:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=10) as r:
+        with urllib.request.urlopen(req, timeout=10, context=_ssl_context()) as r:
             return json.loads(r.read().decode())
     except urllib.error.URLError as e:
         raise ConnectionError(str(e)) from e

@@ -53,7 +53,7 @@ hiddenimports += [
     "sklearn.svm._base",   # transitive dep of linear_model._logistic
 ]
 
-for _pkg in ("anonymeter", "polars"):   # pip not needed in the CLI binary
+for _pkg in ("anonymeter", "polars", "certifi"):   # pip not needed in the CLI binary
     tmp = collect_all(_pkg)
     datas    += tmp[0]; binaries += tmp[1]; hiddenimports += tmp[2]
 
