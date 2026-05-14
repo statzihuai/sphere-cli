@@ -35,6 +35,7 @@ def _clear_line() -> None:
 # ── generate ──────────────────────────────────────────────────────────────────
 
 def cmd_generate(args: argparse.Namespace) -> int:
+    _check_license()
     from ._generate import generate
 
     if not args.json:
@@ -129,6 +130,7 @@ def _print_eval_results(result: dict) -> None:
 
 
 def cmd_evaluate(args: argparse.Namespace) -> int:
+    _check_license()
     from ._evaluate import evaluate
 
     if not args.json:
@@ -178,6 +180,7 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
 # ── certify ───────────────────────────────────────────────────────────────────
 
 def cmd_certify(args: argparse.Namespace) -> int:
+    _check_license()
     from ._evaluate import evaluate
     from ._certify  import build_certificate_html
     import numpy as np
@@ -274,6 +277,188 @@ def cmd_certify(args: argparse.Namespace) -> int:
         print(f"   Privacy  {priv['composite']:.1f} / 100", end="")
     print(f"   ({result['elapsedMs'] / 1000:.1f} s)")
     print(f"  Open in a browser to view; File → Print → Save as PDF to archive.")
+    return 0
+
+
+# ── license ───────────────────────────────────────────────────────────────────
+
+_LICENSE_WORKER_URL = os.environ.get(
+    "SPHERE_WORKER_URL",
+    "https://sphere-license.statzihuai.workers.dev",
+)
+_LICENSE_CACHE_DAYS = 7
+_LICENSE_REQUIRED   = os.environ.get("SPHERE_LICENSE_REQUIRED", "true") != "false"
+
+
+def _sphere_config_dir() -> Path:
+    d = Path.home() / ".config" / "sphere"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+def _license_key_file()   -> Path: return _sphere_config_dir() / "license_key"
+def _license_cache_file() -> Path: return _sphere_config_dir() / "license_cache.json"
+
+
+def _read_stored_license_key() -> str | None:
+    kf = _license_key_file()
+    return kf.read_text(encoding="utf-8").strip() if kf.exists() else None
+
+
+def _write_license_key(key: str) -> None:
+    kf = _license_key_file()
+    kf.write_text(key, encoding="utf-8")
+    kf.chmod(0o600)
+
+
+def _read_license_cache() -> dict | None:
+    cf = _license_cache_file()
+    if not cf.exists():
+        return None
+    try:
+        data = json.loads(cf.read_text(encoding="utf-8"))
+        age_days = (time.time() - data.get("cachedAt", 0)) / 86400
+        return data if age_days <= _LICENSE_CACHE_DAYS else None
+    except Exception:
+        return None
+
+
+def _write_license_cache(data: dict) -> None:
+    cf = _license_cache_file()
+    cf.write_text(json.dumps({**data, "cachedAt": time.time()}), encoding="utf-8")
+
+
+def _validate_key_online(key: str) -> dict:
+    """POST to the Cloudflare Worker. Returns {valid, customer, expiry, error?}."""
+    import urllib.request, urllib.error
+    body = json.dumps({"key": key}).encode()
+    req  = urllib.request.Request(
+        f"{_LICENSE_WORKER_URL}/validate",
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return json.loads(r.read().decode())
+    except urllib.error.URLError as e:
+        raise ConnectionError(str(e)) from e
+
+
+def _check_license() -> None:
+    """Called at the top of every gated command.
+
+    Raises SystemExit(1) with a user-friendly message if the license is
+    missing or invalid.  Skipped entirely when SPHERE_LICENSE_REQUIRED=false.
+    """
+    if not _LICENSE_REQUIRED:
+        return
+
+    key = _read_stored_license_key()
+    if not key:
+        print(
+            "✗  No SPHERE license found.\n"
+            "   Run:  sphere license activate <key>\n"
+            "   Get a license at https://sphere.stanford.edu",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
+    # Try online; fall back to 7-day cache for offline use.
+    try:
+        result = _validate_key_online(key)
+        _write_license_cache(result)
+    except ConnectionError:
+        result = _read_license_cache()
+        if result is None:
+            print(
+                "✗  License server unreachable and local cache has expired.\n"
+                "   Connect to the internet and re-run to refresh your license.",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+
+    if not result.get("valid"):
+        print(
+            f"✗  License invalid: {result.get('error', 'unknown error')}\n"
+            "   Run:  sphere license activate <key>",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
+
+def cmd_license(args: argparse.Namespace) -> int:
+    sub = args.license_command
+
+    # ── activate ──────────────────────────────────────────────────────────────
+    if sub == "activate":
+        key = (getattr(args, "key", None) or "").strip()
+        if not key:
+            try:
+                import getpass
+                key = getpass.getpass("SPHERE license key (input hidden): ").strip()
+            except (KeyboardInterrupt, EOFError):
+                print()
+                return 1
+        if not key.startswith("sphere_"):
+            print("Error: key must start with 'sphere_'", file=sys.stderr)
+            return 1
+        print("Validating …", end="", flush=True)
+        try:
+            result = _validate_key_online(key)
+        except ConnectionError as e:
+            print(f"\nError: could not reach license server — {e}", file=sys.stderr)
+            return 1
+        if not result.get("valid"):
+            print(f"\r✗ Invalid key: {result.get('error', 'unknown error')}", file=sys.stderr)
+            return 1
+        _write_license_key(key)
+        _write_license_cache(result)
+        customer = result.get("customer", "")
+        expiry   = result.get("expiry")
+        print(f"\r✓ License activated  —  {customer}")
+        if expiry:
+            print(f"  Expires: {expiry}")
+        return 0
+
+    # ── status ────────────────────────────────────────────────────────────────
+    if sub == "status":
+        key = _read_stored_license_key()
+        if not key:
+            print("✗ No license key configured.")
+            print("  Run:  sphere license activate <key>")
+            return 0
+        print("Checking …", end="", flush=True)
+        offline = False
+        try:
+            result = _validate_key_online(key)
+            _write_license_cache(result)
+        except ConnectionError:
+            result = _read_license_cache()
+            offline = True
+            if result is None:
+                print("\r✗ License server unreachable and cache expired.")
+                return 1
+        if result.get("valid"):
+            customer = result.get("customer", "")
+            expiry   = result.get("expiry")
+            suffix   = "  (offline — cached)" if offline else ""
+            print(f"\r✓ License valid  —  {customer}{suffix}")
+            if expiry:
+                print(f"  Expires: {expiry}")
+        else:
+            print(f"\r✗ License invalid: {result.get('error', 'unknown')}")
+        return 0
+
+    # ── clear ─────────────────────────────────────────────────────────────────
+    if sub == "clear":
+        removed = False
+        for f in (_license_key_file(), _license_cache_file()):
+            if f.exists():
+                f.unlink()
+                removed = True
+        print("✓ License cleared." if removed else "No license stored.")
+        return 0
+
     return 0
 
 
@@ -527,6 +712,27 @@ def main() -> None:
     # ── demo ──────────────────────────────────────────────────────────────────
     sub.add_parser("demo", help="Run generate + evaluate on the built-in NHANES continuous dataset")
 
+    # ── license ───────────────────────────────────────────────────────────────
+    lic_p = sub.add_parser(
+        "license",
+        help="Activate, check, or clear your SPHERE license",
+        description=(
+            "Manage the SPHERE license key.\n\n"
+            "The key is validated against the SPHERE license server and cached\n"
+            "locally for up to 7 days so the CLI works offline.\n\n"
+            "Set SPHERE_LICENSE_REQUIRED=false to run without a license check\n"
+            "(unlocked / research builds only)."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    lic_sub = lic_p.add_subparsers(dest="license_command", required=True)
+
+    lic_act = lic_sub.add_parser("activate", help="Activate with a sphere_… license key")
+    lic_act.add_argument("key", nargs="?", metavar="KEY",
+                         help="License key (sphere_…). Omit to be prompted.")
+    lic_sub.add_parser("status", help="Show current license status")
+    lic_sub.add_parser("clear",  help="Remove the stored license key and cache")
+
     # ── key ───────────────────────────────────────────────────────────────────
     key_p = sub.add_parser(
         "key",
@@ -552,6 +758,7 @@ def main() -> None:
     elif args.command == "evaluate": sys.exit(cmd_evaluate(args))
     elif args.command == "certify":  sys.exit(cmd_certify(args))
     elif args.command == "demo":     sys.exit(cmd_demo(args))
+    elif args.command == "license":  sys.exit(cmd_license(args))
     elif args.command == "key":      sys.exit(cmd_key(args))
 
 
