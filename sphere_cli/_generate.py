@@ -93,11 +93,19 @@ def generate(
         )
 
     # ── Integer-coded categorical detection ───────────────────────────────────
-    # Binary columns (n_unique == 2) are treated as continuous: running them
-    # through encode-decode (OHE → argmax) breaks the orthogonal Z'Z
-    # preservation and degrades pairwise correlations with other columns.
-    # Only columns with 3 or more unique integer levels are flagged as
-    # categorical (e.g. education, race code, Likert scales).
+    # Columns that go through the encode-decode (OHE → argmax) path preserve
+    # exact discrete values but introduce discretisation error that slightly
+    # degrades correlations with continuous columns.
+    #
+    # Special case — ±1 binary columns:
+    #   Values {-1, +1} are already a mean-centred, symmetric representation.
+    #   SPHERE can rotate them as continuous without leaking the binary nature
+    #   or losing Z'Z preservation, so they skip encode-decode.
+    #
+    # All other binary (e.g. 0/1) and multi-class integer-coded columns:
+    #   Must go through encode-decode so the synthetic output stays within the
+    #   original discrete value set — otherwise a 0/1 column (e.g. diagnosis
+    #   flag) would leak continuous approximations, harming privacy.
     int_cat_col_indices: list[int] = []
     for idx, c in enumerate(data_df.columns):
         col = data_df[c]
@@ -105,12 +113,15 @@ def generate(
             continue
         vals     = col.values.astype(float)
         n_unique = len(np.unique(vals))
-        if (
-            n_unique >= 3                                          # skip binary cols
-            and n_unique <= _MAX_INT_CAT_UNIQUE
-            and np.allclose(vals, np.round(vals), atol=1e-9)
-        ):
-            int_cat_col_indices.append(idx)
+        if n_unique > _MAX_INT_CAT_UNIQUE:
+            continue
+        if not np.allclose(vals, np.round(vals), atol=1e-9):
+            continue
+        # ±1 binary → treat as continuous (mean-centred; Z'Z preserved exactly)
+        if n_unique == 2 and set(np.unique(vals).tolist()) == {-1.0, 1.0}:
+            continue
+        # Everything else (0/1, {1,2}, 3-20 unique levels) → encode-decode
+        int_cat_col_indices.append(idx)
 
     # ── Seed ──────────────────────────────────────────────────────────────────
     actual_seed = seed if seed is not None else int(
