@@ -482,7 +482,7 @@ def _find_example_csv() -> Path:
 
 
 def cmd_demo(args: argparse.Namespace) -> int:  # noqa: ARG001
-    """Run without a license check — demo is always free."""
+    _check_license()
     import tempfile
     from ._generate import generate
     from ._evaluate import evaluate
@@ -523,7 +523,7 @@ def cmd_demo(args: argparse.Namespace) -> int:  # noqa: ARG001
         print(f"✓ {synth_path}  {result['rows']:,} rows × {result['cols']} cols"
               f"  ({elapsed:.1f} s)  seed {result['seed']}")
 
-        # ── Evaluate (fidelity only for speed) ────────────────────────────────
+        # ── Evaluate (fidelity + privacy) ─────────────────────────────────────
         print()
         print(f"Evaluating {real_path.name} vs {synth_path.name} …")
 
@@ -535,7 +535,7 @@ def cmd_demo(args: argparse.Namespace) -> int:  # noqa: ARG001
                 real_path=real_path, synth_path=synth_path,
                 n_attacks=500, n_secrets=5, n_atk_cap=2000,
                 n_neighbors=1, n_aux_cols=20,
-                seed=None, skip_privacy=True, on_progress=_eval_prog,
+                seed=None, skip_privacy=False, on_progress=_eval_prog,
             )
         except Exception as e:
             _clear_line()
