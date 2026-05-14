@@ -93,6 +93,11 @@ def generate(
         )
 
     # ── Integer-coded categorical detection ───────────────────────────────────
+    # Binary columns (n_unique == 2) are treated as continuous: running them
+    # through encode-decode (OHE → argmax) breaks the orthogonal Z'Z
+    # preservation and degrades pairwise correlations with other columns.
+    # Only columns with 3 or more unique integer levels are flagged as
+    # categorical (e.g. education, race code, Likert scales).
     int_cat_col_indices: list[int] = []
     for idx, c in enumerate(data_df.columns):
         col = data_df[c]
@@ -100,7 +105,11 @@ def generate(
             continue
         vals     = col.values.astype(float)
         n_unique = len(np.unique(vals))
-        if n_unique <= _MAX_INT_CAT_UNIQUE and np.allclose(vals, np.round(vals), atol=1e-9):
+        if (
+            n_unique >= 3                                          # skip binary cols
+            and n_unique <= _MAX_INT_CAT_UNIQUE
+            and np.allclose(vals, np.round(vals), atol=1e-9)
+        ):
             int_cat_col_indices.append(idx)
 
     # ── Seed ──────────────────────────────────────────────────────────────────

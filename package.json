@@ -1,6 +1,6 @@
 {
   "name": "sphere-cli",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "SPHERE CLI — synthetic data generation, evaluation, and certification",
   "keywords": ["synthetic-data", "privacy", "cli", "data-science"],
   "homepage": "https://github.com/statzihuai/sphere-cli",
