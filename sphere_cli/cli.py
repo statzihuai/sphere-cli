@@ -546,10 +546,9 @@ def cmd_demo(args: argparse.Namespace) -> int:  # noqa: ARG001
         print(f"✓ {synth_path}  {result['rows']:,} rows × {result['cols']} cols"
               f"  ({elapsed:.1f} s)  seed {result['seed']}")
 
-        # ── Evaluate (fidelity + privacy, lighter params for demo speed) ────────
+        # ── Evaluate (fidelity + privacy) ─────────────────────────────────────
         print()
         print(f"Evaluating {real_path.name} vs {synth_path.name} …")
-        print("  (privacy: 200 attacks · cap 300 rows — run sphere evaluate for full assessment)")
 
         def _eval_prog(frac: float, msg: str) -> None:
             print(_bar(frac, msg), end="", flush=True)
@@ -557,7 +556,7 @@ def cmd_demo(args: argparse.Namespace) -> int:  # noqa: ARG001
         try:
             result = evaluate(
                 real_path=real_path, synth_path=synth_path,
-                n_attacks=200, n_secrets=3, n_atk_cap=300,
+                n_attacks=500, n_secrets=5, n_atk_cap=2000,
                 n_neighbors=1, n_aux_cols=20,
                 seed=None, skip_privacy=False, on_progress=_eval_prog,
             )
