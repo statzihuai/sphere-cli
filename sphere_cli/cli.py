@@ -354,7 +354,10 @@ def _validate_key_online(key: str) -> dict:
     req  = urllib.request.Request(
         f"{_LICENSE_WORKER_URL}/validate",
         data=body,
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "sphere-cli/1.0",
+        },
         method="POST",
     )
     try:
