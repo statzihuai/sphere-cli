@@ -10,18 +10,12 @@
 #   3. PyInstaller produces dist/sphere-cli/sphere.
 #   4. .py sources are restored for continued development.
 #
-# Dependencies bundled: numpy, pandas, scipy, pyarrow, anonymeter.
+# Dependencies bundled: numpy, pandas, scipy, pyarrow, anonymeter, numba, llvmlite.
 # NOT bundled (SPHERE AI stack not needed for CLI):
 #   matplotlib, seaborn, statsmodels, sklearn (except anonymeter's subset).
 
 import os, sys, glob
 from PyInstaller.utils.hooks import collect_all
-
-# ── Numba stub: satisfies anonymeter's hard `from numba import jit` without
-#    bundling the real 180 MB numba + llvmlite.  The stub provides a no-op @jit
-#    decorator; the actual Gower-distance kernel is never called because we
-#    pre-encode all data to numeric before passing to anonymeter.
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(SPEC)), "numba_stub"))
 
 datas    = [("examples/nhanes_sample.csv", "examples")]
 binaries = []
@@ -33,9 +27,6 @@ for so in glob.glob("sphere_cli/*.so"):
 
 # ── Third-party dependencies ──────────────────────────────────────────────────
 hiddenimports = ["scipy.optimize", "scipy.stats", "pyarrow"]
-# numba is handled by the numba_stub inserted at sys.path[0] above;
-# listing it here would make PyInstaller look for real numba (which is not
-# installed) and fail.  The stub is auto-collected via the sys.path insertion.
 
 # anonymeter needs a narrow slice of sklearn — only neighbors + linear_model
 # (inference attack). Listing them explicitly avoids pulling in the 200+ MB
@@ -53,7 +44,7 @@ hiddenimports += [
     "sklearn.svm._base",   # transitive dep of linear_model._logistic
 ]
 
-for _pkg in ("anonymeter", "polars", "certifi"):   # pip not needed in the CLI binary
+for _pkg in ("anonymeter", "polars", "certifi", "numba", "llvmlite"):
     tmp = collect_all(_pkg)
     datas    += tmp[0]; binaries += tmp[1]; hiddenimports += tmp[2]
 
@@ -116,8 +107,6 @@ a = Analysis(
         # SPHERE AI analysis stack — not needed for generate/evaluate/certify
         "matplotlib", "seaborn", "statsmodels",
         "torch", "torchvision",
-        # llvmlite (the real JIT compiler) — not needed; stub numba is used instead
-        "llvmlite",
         # Dev / notebook tools
         "IPython", "ipykernel", "notebook", "jupyter", "pytest",
         "tkinter", "PIL", "PIL.ImageTk", "Pillow", "sphinx",
