@@ -286,7 +286,7 @@ _LICENSE_WORKER_URL = os.environ.get(
     "SPHERE_WORKER_URL",
     "https://sphere-license.statzihuai.workers.dev",
 )
-_LICENSE_CACHE_DAYS = 7
+_LICENSE_CACHE_DAYS = 1
 _LICENSE_REQUIRED   = os.environ.get("SPHERE_LICENSE_REQUIRED", "true") != "false"
 
 
