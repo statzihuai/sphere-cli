@@ -358,7 +358,7 @@ def _check_license() -> None:
         print(
             "✗  No SPHERE license found.\n"
             "   Run:  sphere license activate <key>\n"
-            "   Get a license at https://sphere.stanford.edu",
+            "   Contact zihuai@stanford.edu to get a license.",
             file=sys.stderr,
         )
         raise SystemExit(1)
