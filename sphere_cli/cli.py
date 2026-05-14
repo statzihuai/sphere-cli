@@ -298,7 +298,7 @@ def _find_example_csv() -> Path:
 def cmd_demo(args: argparse.Namespace) -> int:  # noqa: ARG001
     import tempfile
 
-    print("SPHERE demo — built-in NHANES sample (500 rows × 18 cols)")
+    print("SPHERE demo — built-in NHANES dataset (4,899 rows × 20 cols, continuous)")
     print("─" * 52)
 
     try:
@@ -440,7 +440,7 @@ def main() -> None:
     cert.add_argument("--json",           action="store_true",      help="Machine-readable JSON output")
 
     # ── demo ──────────────────────────────────────────────────────────────────
-    sub.add_parser("demo", help="Run generate + evaluate on a built-in example dataset")
+    sub.add_parser("demo", help="Run generate + evaluate on the built-in NHANES continuous dataset")
 
     args = parser.parse_args()
     if   args.command == "generate": sys.exit(cmd_generate(args))
