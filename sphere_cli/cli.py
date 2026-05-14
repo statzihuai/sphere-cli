@@ -636,7 +636,7 @@ def main() -> None:
     cert.add_argument("--json",           action="store_true",      help="Machine-readable JSON output")
 
     # ── demo ──────────────────────────────────────────────────────────────────
-    sub.add_parser("demo", help="Run generate + evaluate on the built-in NHANES continuous dataset")
+    sub.add_parser("demo", help="Run generate + evaluate on the built-in NHANES dataset (continuous + categorical)")
 
     # ── license ───────────────────────────────────────────────────────────────
     lic_p = sub.add_parser(
