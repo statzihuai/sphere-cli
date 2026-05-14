@@ -462,90 +462,6 @@ def cmd_license(args: argparse.Namespace) -> int:
     return 0
 
 
-# ── key management ────────────────────────────────────────────────────────────
-
-def _key_dir() -> Path:
-    """~/.config/sphere — created on first use."""
-    d = Path.home() / ".config" / "sphere"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
-
-def _key_file() -> Path:
-    return _key_dir() / "api_key"
-
-def _mask_key(key: str) -> str:
-    """sk-ant-api03-ABC…XYZ1  →  sk-ant-…XYZ1"""
-    if len(key) <= 11:
-        return "sk-***"
-    return key[:7] + "…" + key[-4:]
-
-def read_api_key() -> str | None:
-    """Return the stored Anthropic API key, or None.
-
-    Priority:  SPHERE_API_KEY env var  >  ~/.config/sphere/api_key file.
-    This function is also importable by other modules that need the key.
-    """
-    env = os.environ.get("SPHERE_API_KEY", "").strip()
-    if env:
-        return env
-    kf = _key_file()
-    if kf.exists():
-        return kf.read_text(encoding="utf-8").strip() or None
-    return None
-
-
-def cmd_key(args: argparse.Namespace) -> int:
-    sub = args.key_command
-
-    # ── set ───────────────────────────────────────────────────────────────────
-    if sub == "set":
-        key = getattr(args, "value", None) or ""
-        if not key:
-            import getpass
-            try:
-                key = getpass.getpass("Anthropic API key (input hidden): ").strip()
-            except (KeyboardInterrupt, EOFError):
-                print()
-                return 1
-        key = key.strip()
-        if not key.startswith("sk-"):
-            print("Error: key must start with 'sk-'  "
-                  "(get yours at https://console.anthropic.com/settings/keys)",
-                  file=sys.stderr)
-            return 1
-        kf = _key_file()
-        kf.write_text(key, encoding="utf-8")
-        kf.chmod(0o600)
-        print(f"✓ API key saved ({_mask_key(key)})")
-        print(f"  Stored at: {kf}  (mode 0600)")
-        return 0
-
-    # ── status ────────────────────────────────────────────────────────────────
-    if sub == "status":
-        key = read_api_key()
-        if key:
-            src = "env SPHERE_API_KEY" if os.environ.get("SPHERE_API_KEY") else str(_key_file())
-            print(f"✓ API key configured: {_mask_key(key)}")
-            print(f"  Source: {src}")
-        else:
-            print("✗ No API key configured.")
-            print("  Run:  sphere key set")
-            print("  Or:   export SPHERE_API_KEY=sk-ant-…")
-        return 0
-
-    # ── clear ─────────────────────────────────────────────────────────────────
-    if sub == "clear":
-        kf = _key_file()
-        if kf.exists():
-            kf.unlink()
-            print("✓ API key cleared.")
-        else:
-            print("No API key stored (nothing to clear).")
-        return 0
-
-    return 0
-
-
 # ── demo ──────────────────────────────────────────────────────────────────────
 
 def _find_example_csv() -> Path:
@@ -733,33 +649,12 @@ def main() -> None:
     lic_sub.add_parser("status", help="Show current license status")
     lic_sub.add_parser("clear",  help="Remove the stored license key and cache")
 
-    # ── key ───────────────────────────────────────────────────────────────────
-    key_p = sub.add_parser(
-        "key",
-        help="Manage your Anthropic API key",
-        description=(
-            "Store, check, or remove the Anthropic API key used by SPHERE.\n\n"
-            "The key is saved to ~/.config/sphere/api_key with permissions 0600.\n"
-            "Set SPHERE_API_KEY in your environment to override the stored key."
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    key_sub = key_p.add_subparsers(dest="key_command", required=True)
-
-    key_set = key_sub.add_parser("set", help="Save an Anthropic API key")
-    key_set.add_argument("value", nargs="?", metavar="KEY",
-                         help="API key (sk-…). Omit to be prompted with hidden input.")
-
-    key_sub.add_parser("status", help="Show whether a key is configured")
-    key_sub.add_parser("clear",  help="Remove the stored API key")
-
     args = parser.parse_args()
     if   args.command == "generate": sys.exit(cmd_generate(args))
     elif args.command == "evaluate": sys.exit(cmd_evaluate(args))
     elif args.command == "certify":  sys.exit(cmd_certify(args))
     elif args.command == "demo":     sys.exit(cmd_demo(args))
     elif args.command == "license":  sys.exit(cmd_license(args))
-    elif args.command == "key":      sys.exit(cmd_key(args))
 
 
 if __name__ == "__main__":
