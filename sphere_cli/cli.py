@@ -276,6 +276,94 @@ def cmd_certify(args: argparse.Namespace) -> int:
     return 0
 
 
+# ── demo ──────────────────────────────────────────────────────────────────────
+
+def _find_example_csv() -> Path:
+    """Locate the bundled NHANES sample CSV.
+
+    Works both in a PyInstaller frozen binary (sys._MEIPASS) and during
+    development (relative to this file's parent package directory).
+    """
+    import sys
+    if getattr(sys, "frozen", False):
+        base = Path(sys._MEIPASS)
+    else:
+        base = Path(__file__).parent.parent
+    p = base / "examples" / "nhanes_sample.csv"
+    if not p.exists():
+        raise FileNotFoundError(f"Built-in example not found at {p}")
+    return p
+
+
+def cmd_demo(args: argparse.Namespace) -> int:  # noqa: ARG001
+    import tempfile
+
+    print("SPHERE demo — built-in NHANES sample (500 rows × 18 cols)")
+    print("─" * 52)
+
+    try:
+        real_path = _find_example_csv()
+    except FileNotFoundError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    # Temp file for synthetic output
+    tmp = tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
+    synth_path = Path(tmp.name)
+    tmp.close()
+
+    try:
+        # ── Generate ──────────────────────────────────────────────────────────
+        print()
+
+        class _GenArgs:
+            input    = real_path
+            output   = synth_path
+            k        = 2
+            theta    = None
+            delta    = None
+            mix_prob = 0.75
+            seed     = 42
+            json     = False
+
+        rc = cmd_generate(_GenArgs())
+        if rc:
+            return rc
+
+        # ── Evaluate (fidelity only for speed) ────────────────────────────────
+        print()
+
+        class _EvalArgs:
+            real         = real_path
+            synth        = synth_path
+            n_attacks    = 500
+            n_secrets    = 5
+            n_atk_cap    = 2000
+            n_neighbors  = 1
+            n_aux_cols   = 20
+            seed         = 42
+            skip_privacy = True
+            json         = False
+
+        rc = cmd_evaluate(_EvalArgs())
+        if rc:
+            return rc
+
+    finally:
+        try:
+            synth_path.unlink()
+            synth_path.with_suffix(".sphere.json").unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    print("Try it on your own data:")
+    print("  sphere generate your_data.csv -o synthetic.csv")
+    print("  sphere evaluate your_data.csv synthetic.csv")
+    print("  sphere certify  your_data.csv synthetic.csv -o report.html")
+    print()
+    return 0
+
+
 # ── main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -351,10 +439,14 @@ def main() -> None:
                       help="ISO-8601 timestamp when sphere generate was run")
     cert.add_argument("--json",           action="store_true",      help="Machine-readable JSON output")
 
+    # ── demo ──────────────────────────────────────────────────────────────────
+    sub.add_parser("demo", help="Run generate + evaluate on a built-in example dataset")
+
     args = parser.parse_args()
     if   args.command == "generate": sys.exit(cmd_generate(args))
     elif args.command == "evaluate": sys.exit(cmd_evaluate(args))
     elif args.command == "certify":  sys.exit(cmd_certify(args))
+    elif args.command == "demo":     sys.exit(cmd_demo(args))
 
 
 if __name__ == "__main__":

@@ -23,7 +23,7 @@ from PyInstaller.utils.hooks import collect_all
 #    pre-encode all data to numeric before passing to anonymeter.
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(SPEC)), "numba_stub"))
 
-datas    = []
+datas    = [("examples/nhanes_sample.csv", "examples")]
 binaries = []
 
 # ── Cython .so files for our proprietary modules ──────────────────────────────
