@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sphere-synth"
+version = "0.1.0"
+description = "SPHERE — generate and evaluate synthetic tabular data"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "scipy>=1.11",
+    "pyarrow>=14",
+    "anonymeter>=1.0",
+]
+
+[project.optional-dependencies]
+# numba gives a 3-6× speedup on large datasets (bundled in SPHERE.app already)
+fast = ["numba"]
+
+[project.scripts]
+sphere = "sphere_cli.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["sphere_cli*"]

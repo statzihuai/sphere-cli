@@ -1,0 +1,10 @@
+# PyInstaller build artefacts — do not commit
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.pyc
+
+# Cython-compiled binaries — platform-specific, not committed
+*.so
+*.c
