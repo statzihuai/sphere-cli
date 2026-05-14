@@ -32,7 +32,10 @@ for so in glob.glob("sphere_cli/*.so"):
     binaries.append((so, "sphere_cli"))
 
 # ── Third-party dependencies ──────────────────────────────────────────────────
-hiddenimports = ["scipy.optimize", "scipy.stats", "pyarrow", "numba"]
+hiddenimports = ["scipy.optimize", "scipy.stats", "pyarrow"]
+# numba is handled by the numba_stub inserted at sys.path[0] above;
+# listing it here would make PyInstaller look for real numba (which is not
+# installed) and fail.  The stub is auto-collected via the sys.path insertion.
 
 # anonymeter needs a narrow slice of sklearn — only neighbors + linear_model
 # (inference attack). Listing them explicitly avoids pulling in the 200+ MB

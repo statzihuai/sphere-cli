@@ -61,13 +61,18 @@ jobs:
       - name: Install build dependencies
         run: |
           pip install --upgrade pip
-          # Pin numpy>=2.0 FIRST — real numba (from [fast]) requires numpy<2
-          # and would downgrade it, causing the Python-3.12 add_docstring crash.
-          # The CLI spec uses a numba stub anyway, so real numba is not needed.
+          # Pin numpy>=2.0 FIRST so nothing can downgrade it.
           pip install "numpy>=2.0"
           pip install cython setuptools wheel pyinstaller
-          pip install git+https://github.com/statice/anonymeter
-          pip install -e "."
+          # Install anonymeter WITHOUT its declared deps: its numpy<1.27 and
+          # numba~=0.59 constraints are overly conservative — the code runs
+          # fine on numpy 2.x, and numba is stubbed out for the CLI binary.
+          pip install --no-deps git+https://github.com/statice/anonymeter
+          # Install anonymeter's actual runtime deps (no numba/llvmlite needed).
+          pip install "pandas>=2.0" "scipy>=1.11" "scikit-learn>=1.2" "joblib>=1.2"
+          # Install sphere-synth itself without re-resolving deps (everything
+          # is already pinned above; avoids pip picking up anonymeter's constraints).
+          pip install --no-deps -e "."
           pip install polars pyarrow
 
       - name: Build CLI binary
@@ -103,13 +108,18 @@ jobs:
       - name: Install build dependencies
         run: |
           pip install --upgrade pip
-          # Pin numpy>=2.0 FIRST — real numba (from [fast]) requires numpy<2
-          # and would downgrade it, causing the Python-3.12 add_docstring crash.
-          # The CLI spec uses a numba stub anyway, so real numba is not needed.
+          # Pin numpy>=2.0 FIRST so nothing can downgrade it.
           pip install "numpy>=2.0"
           pip install cython setuptools wheel pyinstaller
-          pip install git+https://github.com/statice/anonymeter
-          pip install -e "."
+          # Install anonymeter WITHOUT its declared deps: its numpy<1.27 and
+          # numba~=0.59 constraints are overly conservative — the code runs
+          # fine on numpy 2.x, and numba is stubbed out for the CLI binary.
+          pip install --no-deps git+https://github.com/statice/anonymeter
+          # Install anonymeter's actual runtime deps (no numba/llvmlite needed).
+          pip install "pandas>=2.0" "scipy>=1.11" "scikit-learn>=1.2" "joblib>=1.2"
+          # Install sphere-synth itself without re-resolving deps (everything
+          # is already pinned above; avoids pip picking up anonymeter's constraints).
+          pip install --no-deps -e "."
           pip install polars pyarrow
 
       - name: Build CLI binary
@@ -145,13 +155,18 @@ jobs:
       - name: Install build dependencies
         run: |
           pip install --upgrade pip
-          # Pin numpy>=2.0 FIRST — real numba (from [fast]) requires numpy<2
-          # and would downgrade it, causing the Python-3.12 add_docstring crash.
-          # The CLI spec uses a numba stub anyway, so real numba is not needed.
+          # Pin numpy>=2.0 FIRST so nothing can downgrade it.
           pip install "numpy>=2.0"
           pip install cython setuptools wheel pyinstaller
-          pip install git+https://github.com/statice/anonymeter
-          pip install -e "."
+          # Install anonymeter WITHOUT its declared deps: its numpy<1.27 and
+          # numba~=0.59 constraints are overly conservative — the code runs
+          # fine on numpy 2.x, and numba is stubbed out for the CLI binary.
+          pip install --no-deps git+https://github.com/statice/anonymeter
+          # Install anonymeter's actual runtime deps (no numba/llvmlite needed).
+          pip install "pandas>=2.0" "scipy>=1.11" "scikit-learn>=1.2" "joblib>=1.2"
+          # Install sphere-synth itself without re-resolving deps (everything
+          # is already pinned above; avoids pip picking up anonymeter's constraints).
+          pip install --no-deps -e "."
           pip install polars pyarrow
 
       - name: Build CLI binary
