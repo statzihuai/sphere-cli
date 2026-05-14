@@ -511,7 +511,7 @@ def cmd_demo(args: argparse.Namespace) -> int:  # noqa: ARG001
         try:
             result = generate(
                 input_path=real_path, output_path=synth_path,
-                k=2, mix_prob=0.75, seed=42, on_progress=_gen_prog,
+                k=2, mix_prob=0.75, seed=None, on_progress=_gen_prog,
             )
         except Exception as e:
             _clear_line()
@@ -535,7 +535,7 @@ def cmd_demo(args: argparse.Namespace) -> int:  # noqa: ARG001
                 real_path=real_path, synth_path=synth_path,
                 n_attacks=500, n_secrets=5, n_atk_cap=2000,
                 n_neighbors=1, n_aux_cols=20,
-                seed=42, skip_privacy=True, on_progress=_eval_prog,
+                seed=None, skip_privacy=True, on_progress=_eval_prog,
             )
         except Exception as e:
             _clear_line()
