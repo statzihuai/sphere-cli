@@ -482,7 +482,10 @@ def _find_example_csv() -> Path:
 
 
 def cmd_demo(args: argparse.Namespace) -> int:  # noqa: ARG001
+    """Run without a license check — demo is always free."""
     import tempfile
+    from ._generate import generate
+    from ._evaluate import evaluate
 
     print("SPHERE demo — built-in NHANES dataset (4,899 rows × 20 cols, continuous)")
     print("─" * 52)
@@ -493,7 +496,6 @@ def cmd_demo(args: argparse.Namespace) -> int:  # noqa: ARG001
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
-    # Temp file for synthetic output
     tmp = tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
     synth_path = Path(tmp.name)
     tmp.close()
@@ -501,39 +503,47 @@ def cmd_demo(args: argparse.Namespace) -> int:  # noqa: ARG001
     try:
         # ── Generate ──────────────────────────────────────────────────────────
         print()
+        print(f"Generating synthetic data from {real_path.name} …")
 
-        class _GenArgs:
-            input    = real_path
-            output   = synth_path
-            k        = 2
-            theta    = None
-            delta    = None
-            mix_prob = 0.75
-            seed     = 42
-            json     = False
+        def _gen_prog(frac: float, msg: str) -> None:
+            print(_bar(frac, msg), end="", flush=True)
 
-        rc = cmd_generate(_GenArgs())
-        if rc:
-            return rc
+        try:
+            result = generate(
+                input_path=real_path, output_path=synth_path,
+                k=2, mix_prob=0.75, seed=42, on_progress=_gen_prog,
+            )
+        except Exception as e:
+            _clear_line()
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+
+        _clear_line()
+        elapsed = result["elapsedMs"] / 1000
+        print(f"✓ {synth_path}  {result['rows']:,} rows × {result['cols']} cols"
+              f"  ({elapsed:.1f} s)  seed {result['seed']}")
 
         # ── Evaluate (fidelity only for speed) ────────────────────────────────
         print()
+        print(f"Evaluating {real_path.name} vs {synth_path.name} …")
 
-        class _EvalArgs:
-            real         = real_path
-            synth        = synth_path
-            n_attacks    = 500
-            n_secrets    = 5
-            n_atk_cap    = 2000
-            n_neighbors  = 1
-            n_aux_cols   = 20
-            seed         = 42
-            skip_privacy = True
-            json         = False
+        def _eval_prog(frac: float, msg: str) -> None:
+            print(_bar(frac, msg), end="", flush=True)
 
-        rc = cmd_evaluate(_EvalArgs())
-        if rc:
-            return rc
+        try:
+            result = evaluate(
+                real_path=real_path, synth_path=synth_path,
+                n_attacks=500, n_secrets=5, n_atk_cap=2000,
+                n_neighbors=1, n_aux_cols=20,
+                seed=42, skip_privacy=True, on_progress=_eval_prog,
+            )
+        except Exception as e:
+            _clear_line()
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+
+        _clear_line()
+        _print_eval_results(result)
 
     finally:
         try:

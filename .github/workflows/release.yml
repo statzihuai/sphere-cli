@@ -61,9 +61,13 @@ jobs:
       - name: Install build dependencies
         run: |
           pip install --upgrade pip
+          # Pin numpy>=2.0 FIRST — real numba (from [fast]) requires numpy<2
+          # and would downgrade it, causing the Python-3.12 add_docstring crash.
+          # The CLI spec uses a numba stub anyway, so real numba is not needed.
+          pip install "numpy>=2.0"
           pip install cython setuptools wheel pyinstaller
           pip install git+https://github.com/statice/anonymeter
-          pip install -e ".[fast]"
+          pip install -e "."
           pip install polars pyarrow
 
       - name: Build CLI binary
@@ -99,9 +103,13 @@ jobs:
       - name: Install build dependencies
         run: |
           pip install --upgrade pip
+          # Pin numpy>=2.0 FIRST — real numba (from [fast]) requires numpy<2
+          # and would downgrade it, causing the Python-3.12 add_docstring crash.
+          # The CLI spec uses a numba stub anyway, so real numba is not needed.
+          pip install "numpy>=2.0"
           pip install cython setuptools wheel pyinstaller
           pip install git+https://github.com/statice/anonymeter
-          pip install -e ".[fast]"
+          pip install -e "."
           pip install polars pyarrow
 
       - name: Build CLI binary
@@ -137,9 +145,13 @@ jobs:
       - name: Install build dependencies
         run: |
           pip install --upgrade pip
+          # Pin numpy>=2.0 FIRST — real numba (from [fast]) requires numpy<2
+          # and would downgrade it, causing the Python-3.12 add_docstring crash.
+          # The CLI spec uses a numba stub anyway, so real numba is not needed.
+          pip install "numpy>=2.0"
           pip install cython setuptools wheel pyinstaller
           pip install git+https://github.com/statice/anonymeter
-          pip install -e ".[fast]"
+          pip install -e "."
           pip install polars pyarrow
 
       - name: Build CLI binary
