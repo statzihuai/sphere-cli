@@ -49,6 +49,9 @@ sh install.sh --uninstall
 ## Quick start
 
 ```sh
+# Activate your license (once)
+sphere license activate sphere_xxxxxxxxxxxxxxxxxxxx
+
 # Generate synthetic data
 sphere generate real.csv -o synth.csv
 
@@ -62,6 +65,22 @@ sphere certify real.csv synth.csv -o report.html
 ---
 
 ## Commands
+
+### `sphere license`
+
+Activate and manage your SPHERE license. A valid license is required to use `generate`, `evaluate`, and `certify`.
+
+```
+sphere license activate [KEY]   # Activate with a sphere_… key (prompts if omitted)
+sphere license status           # Check current license (validates online, falls back to cache)
+sphere license clear            # Remove stored key and cache
+```
+
+The key is stored at `~/.config/sphere/license_key` (mode 0600). After a successful activation the license is cached locally for **7 days**, so the CLI works offline within that window.
+
+> Don't have a license? Contact [zihuai@stanford.edu](mailto:zihuai@stanford.edu) or visit [sphere.stanford.edu](https://sphere.stanford.edu).
+
+---
 
 ### `sphere generate`
 
@@ -118,6 +137,8 @@ sphere evaluate real.csv synth.csv --json > metrics.json
 
 | Variable | Description |
 |---|---|
+| `SPHERE_LICENSE_REQUIRED` | Set to `false` to bypass license checks (research / unlocked builds) |
+| `SPHERE_WORKER_URL` | Override the license validation endpoint |
 | `SPHERE_PREFIX` | Override install prefix |
 | `SPHERE_VERSION` | Pin a release tag, e.g. `v0.1.0` |
 | `SPHERE_BUNDLE_URL` | Full URL to a `sphere-cli-*.tar.gz` (skip auto-detect) |
