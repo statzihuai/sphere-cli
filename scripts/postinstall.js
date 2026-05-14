@@ -77,14 +77,25 @@ async function main() {
   const nativeDir = path.join(PKG_DIR, 'native');
   const tmpTar    = path.join(os.tmpdir(), `sphere-cli-install-${process.pid}.tar.gz`);
 
-  // Already installed (e.g. re-running postinstall manually)
-  const binaryPath = path.join(nativeDir, 'sphere-cli', 'sphere');
-  if (fs.existsSync(binaryPath)) {
-    console.log('✓ SPHERE CLI binary already present — skipping download.');
+  // Re-download whenever the installed version doesn't match the package version.
+  // This ensures `npm install -g sphere-cli` or `npm update -g sphere-cli` always
+  // delivers the correct binary even when one is already present from a prior release.
+  const binaryPath  = path.join(nativeDir, 'sphere-cli', 'sphere');
+  const markerPath  = path.join(nativeDir, '.sphere-cli-version');
+  const installedVer = fs.existsSync(markerPath)
+    ? fs.readFileSync(markerPath, 'utf8').trim()
+    : null;
+
+  if (fs.existsSync(binaryPath) && installedVer === VERSION) {
+    console.log(`✓ SPHERE CLI v${VERSION} already installed — skipping download.`);
     return;
   }
 
-  console.log(`\nDownloading SPHERE CLI v${VERSION} for ${platform} …`);
+  if (installedVer && installedVer !== VERSION) {
+    console.log(`\nUpgrading SPHERE CLI ${installedVer} → ${VERSION} for ${platform} …`);
+  } else {
+    console.log(`\nDownloading SPHERE CLI v${VERSION} for ${platform} …`);
+  }
   console.log(`  ${url}\n`);
 
   try {
@@ -108,6 +119,9 @@ async function main() {
 
   // Ensure the binary is executable
   fs.chmodSync(binaryPath, 0o755);
+
+  // Write version marker so future postinstall runs can detect upgrades
+  fs.writeFileSync(markerPath, VERSION, 'utf8');
 
   console.log('✓ SPHERE CLI installed.\n');
   console.log('  Quick start:');
