@@ -153,7 +153,7 @@ jobs:
           name: cli-linux-arm64
           path: dist/sphere-cli-linux-arm64.tar.gz
 
-  # ── Publish CLI tarballs to GitHub Release ───────────────────────────────────
+  # ── Publish CLI tarballs to GitHub Release + npm ────────────────────────────
   release:
     needs:
       - check-version
@@ -173,7 +173,7 @@ jobs:
           merge-multiple: true
           path: artifacts
 
-      - name: Upload CLI assets to release
+      - name: Upload CLI assets to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.check-version.outputs.tag }}
@@ -184,3 +184,15 @@ jobs:
             install.sh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Publish to npm
+        # SPHERE_SKIP_POSTINSTALL=1 prevents postinstall from downloading
+        # the binary we just uploaded (it's not needed in the publish step).
+        run: SPHERE_SKIP_POSTINSTALL=1 npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

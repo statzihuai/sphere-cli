@@ -8,21 +8,25 @@ Command-line interface for **SPHERE** — synthetic data generation, evaluation,
 
 ## Install
 
-**One line — no Python or dependencies required:**
+**npm (recommended):**
+
+```sh
+npm install -g sphere-cli
+```
+
+No Python, no curl, no PATH editing. Requires Node.js ≥ 16.
+
+**curl (no Node.js required):**
 
 ```sh
 curl -fsSL https://github.com/statzihuai/sphere-cli/releases/latest/download/install.sh | sh
 ```
 
-**User-local install (no sudo — works on HPC / cloud):**
+For HPC / cloud with no sudo:
 
 ```sh
 curl -fsSL https://github.com/statzihuai/sphere-cli/releases/latest/download/install.sh | sh -s -- --prefix ~/.local
-```
-
-Then add to your shell startup file (`~/.bashrc` or `~/.zshrc`):
-
-```sh
+# then add to ~/.bashrc or ~/.zshrc:
 export PATH="$HOME/.local/bin:$PATH"
 ```
 

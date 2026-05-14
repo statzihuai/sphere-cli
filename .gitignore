@@ -8,3 +8,7 @@ __pycache__/
 # Cython-compiled binaries — platform-specific, not committed
 *.so
 *.c
+
+# npm postinstall drops the platform binary here — never commit
+native/
+package-lock.json
