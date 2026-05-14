@@ -487,7 +487,7 @@ def cmd_demo(args: argparse.Namespace) -> int:  # noqa: ARG001
     from ._generate import generate
     from ._evaluate import evaluate
 
-    print("SPHERE demo — built-in NHANES dataset (4,899 rows × 20 cols, continuous)")
+    print("SPHERE demo — built-in NHANES dataset (4,899 rows × 20 cols, continuous + categorical)")
     print("─" * 52)
 
     try:
