@@ -36,10 +36,9 @@ def _clear_line() -> None:
 
 def cmd_generate(args: argparse.Namespace) -> int:
     _check_license()
-    from ._generate import generate
-
     if not args.json:
         print(f"Generating synthetic data from {args.input} …")
+    from ._generate import generate
 
     def on_progress(frac: float, msg: str) -> None:
         if not args.json:
@@ -131,10 +130,9 @@ def _print_eval_results(result: dict) -> None:
 
 def cmd_evaluate(args: argparse.Namespace) -> int:
     _check_license()
-    from ._evaluate import evaluate
-
     if not args.json:
         print(f"Evaluating {args.real.name} vs {args.synth.name} …")
+    from ._evaluate import evaluate
 
     t0 = time.perf_counter()
 
@@ -181,12 +179,11 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
 
 def cmd_certify(args: argparse.Namespace) -> int:
     _check_license()
+    if not args.json:
+        print(f"Certifying {args.real.name} vs {args.synth.name} …")
     from ._evaluate import evaluate
     from ._certify  import build_certificate_html
     import numpy as np
-
-    if not args.json:
-        print(f"Certifying {args.real.name} vs {args.synth.name} …")
 
     t0 = time.perf_counter()
 
@@ -506,10 +503,9 @@ def _find_example_csv() -> Path:
 
 def cmd_demo(args: argparse.Namespace) -> int:  # noqa: ARG001
     _check_license()
-    import tempfile
-    from ._generate import generate
-    from ._evaluate import evaluate
 
+    # Print header immediately — before heavy imports (pandas/pyarrow) so the
+    # user sees output right away rather than waiting in silence.
     print("SPHERE demo — built-in NHANES dataset (4,899 rows × 18 cols, continuous + categorical)")
     print("─" * 52)
 
@@ -518,6 +514,10 @@ def cmd_demo(args: argparse.Namespace) -> int:  # noqa: ARG001
     except FileNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
+
+    import tempfile
+    from ._generate import generate
+    from ._evaluate import evaluate
 
     tmp = tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
     synth_path = Path(tmp.name)
