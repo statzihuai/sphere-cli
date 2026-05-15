@@ -98,7 +98,7 @@ a = Analysis(
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=["hooks"],
-    runtime_hooks=["hooks/pyi_rth_polars.py"],
+    runtime_hooks=[],
     excludes=[
         # SPHERE AI analysis stack — not needed for generate/evaluate/certify
         "matplotlib", "seaborn", "statsmodels",
