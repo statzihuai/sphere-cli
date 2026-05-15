@@ -6,10 +6,8 @@ from pathlib import Path
 from typing import Callable
 
 import numpy as np
-import pandas as pd
 
 from ._algo import sphere
-from ._core import _detect_id_columns
 
 Progress = Callable[[float, str], None]
 _MAX_INT_CAT_UNIQUE = 20
@@ -49,6 +47,8 @@ def generate(
 
     # ── Load ──────────────────────────────────────────────────────────────────
     prog(0.0, "loading")
+    import pandas as pd
+    from ._core import _detect_id_columns
     try:
         import pyarrow.csv as _pa_csv
         df = _pa_csv.read_csv(str(input_path)).to_pandas()

@@ -16,19 +16,6 @@ from pathlib import Path
 from typing import Callable
 
 import numpy as np
-import pandas as pd
-
-from ._core import (
-    _detect_id_columns,
-    encode_pair,
-    fidelity_metrics,
-    column_shuffle,
-    normalize,
-    _patch_anonymeter_nn,
-    _run_so,
-    _run_lk,
-    _run_inf,
-)
 
 Progress = Callable[[float, str], None]
 _MAX_FIDELITY_N = 50_000
@@ -63,6 +50,18 @@ def evaluate(
 
     # ── Load ──────────────────────────────────────────────────────────────────
     prog(0.0, "loading")
+    import pandas as pd
+    from ._core import (
+        _detect_id_columns,
+        encode_pair,
+        fidelity_metrics,
+        column_shuffle,
+        normalize,
+        _patch_anonymeter_nn,
+        _run_so,
+        _run_lk,
+        _run_inf,
+    )
     try:
         import pyarrow.csv as _pa_csv
         real  = _pa_csv.read_csv(str(real_path)).to_pandas()
