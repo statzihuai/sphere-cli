@@ -134,19 +134,33 @@ def evaluate(
     rng  = np.random.RandomState(seed_used)
     shuf = column_shuffle(real_enc, rng)
 
+    # Re-seed the global numpy RNG immediately before each attack triple so that
+    # Anonymeter's internal np.random.choice (attack-row sampling) is identical
+    # across the (real, shuf, synth) calls — making the three baselines attack
+    # the exact same rows for a fair apples-to-apples comparison, and making
+    # results reproducible regardless of prior global-RNG consumption.
     prog(0.20, "singling out …")
+    np.random.seed(seed_used)
     so_real  = _run_so(real_enc, real_enc,  n_attacks, n_atk_cap)
+    np.random.seed(seed_used)
     so_shuf  = _run_so(real_enc, shuf,      n_attacks, n_atk_cap)
+    np.random.seed(seed_used)
     so_synth = _run_so(real_enc, synth_enc, n_attacks, n_atk_cap)
 
     prog(0.45, "linkability …")
+    np.random.seed(seed_used)
     lk_real  = _run_lk(real_enc, real_enc,  n_attacks, n_atk_cap, n_neighbors, n_aux_cols, np.random.RandomState(seed_used))
+    np.random.seed(seed_used)
     lk_shuf  = _run_lk(real_enc, shuf,      n_attacks, n_atk_cap, n_neighbors, n_aux_cols, np.random.RandomState(seed_used))
+    np.random.seed(seed_used)
     lk_synth = _run_lk(real_enc, synth_enc, n_attacks, n_atk_cap, n_neighbors, n_aux_cols, np.random.RandomState(seed_used))
 
     prog(0.65, "inference …")
+    np.random.seed(seed_used)
     inf_real  = _run_inf(real_enc, real_enc,  n_attacks, n_atk_cap, np.random.RandomState(seed_used), n_secrets)
+    np.random.seed(seed_used)
     inf_shuf  = _run_inf(real_enc, shuf,      n_attacks, n_atk_cap, np.random.RandomState(seed_used), n_secrets)
+    np.random.seed(seed_used)
     inf_synth = _run_inf(real_enc, synth_enc, n_attacks, n_atk_cap, np.random.RandomState(seed_used), n_secrets)
 
     privacy = {
