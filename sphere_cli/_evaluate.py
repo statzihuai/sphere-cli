@@ -1,28 +1,17 @@
 """Evaluate fidelity and privacy of a synthetic dataset.
 
-Primary path: shell out to the sphere-eval sidecar binary (same one used by
-SPHERE.app) for bit-exact agreement between CLI and app.
+Runs entirely in-process using the bundled anonymeter/numba — the CLI is a
+fully self-contained standalone tool with no dependency on SPHERE.app or the
+sphere-eval binary.
 
-Fallback path: run evaluation in-process using the bundled anonymeter/numba
-when sphere-eval cannot be located (standalone install without SPHERE.app).
-
-Sidecar discovery order (first match wins):
-  1. SPHERE_EVAL_BIN environment variable
-  2. Frozen bundle co-location (_MEIPASS or exe directory)
-  3. Dev tree: release/mac-arm64/SPHERE.app  (freshly-built release app)
-  4. Dev tree: python-sidecar/dist/sphere-eval/sphere-eval
-  5. /Applications/SPHERE.app
-  6. ~/Applications/SPHERE.app
-  7. sphere-eval on PATH
+Privacy attacks pass the original mixed-type DataFrames to Anonymeter so it
+uses its native Gower distance (matching the sidecar and reproduce.py).
+The global numpy RNG is re-seeded immediately before each of the 9 Anonymeter
+calls so all three baselines (real / col-shuffle / synth) attack the exact same
+rows — ensuring a fair apples-to-apples comparison and reproducible results.
 """
 from __future__ import annotations
 
-import json
-import os
-import shutil
-import subprocess
-import sys
-import threading
 from pathlib import Path
 from typing import Callable
 
@@ -42,146 +31,34 @@ from ._core import (
 
 Progress = Callable[[float, str], None]
 _MAX_FIDELITY_N = 50_000
-_SIDECAR_REL = Path("Contents") / "Resources" / "sidecar" / "sphere-eval" / "sphere-eval"
 
 
-# ── Sidecar binary discovery ──────────────────────────────────────────────────
-
-def _find_sidecar() -> Path:
-    """Return the path to the sphere-eval binary, or raise FileNotFoundError."""
-
-    def _ok(p: Path) -> bool:
-        return p.is_file() and os.access(p, os.X_OK)
-
-    # 1. Explicit env-var override
-    env = os.environ.get("SPHERE_EVAL_BIN")
-    if env and _ok(p := Path(env)):
-        return p
-
-    # 2. Frozen bundle: check _MEIPASS and the directory holding the sphere binary
-    if getattr(sys, "frozen", False):
-        for base in [Path(sys._MEIPASS), Path(sys.executable).parent]:
-            c = base / "sidecar" / "sphere-eval" / "sphere-eval"
-            if _ok(c):
-                return c
-
-    # 3 & 4. Dev tree — search up from __file__ and from the sphere binary
-    roots: list[Path] = []
-    here = Path(__file__).parent          # sphere_cli/ (or _internal/sphere_cli/ frozen)
-    roots += [here.parent.parent, here.parent.parent.parent]
-    if getattr(sys, "frozen", False):
-        exe_root = Path(sys.executable).parent.parent.parent
-        roots += [exe_root, exe_root.parent]
-
-    for root in roots:
-        root = root.resolve()
-        # 3. Freshly-built release app (canonical reference)
-        rel_app = root / "release" / "mac-arm64" / "SPHERE.app" / _SIDECAR_REL
-        if _ok(rel_app):
-            return rel_app
-        # 4. Raw sidecar build output
-        raw = root / "python-sidecar" / "dist" / "sphere-eval" / "sphere-eval"
-        if _ok(raw):
-            return raw
-
-    # 5–6. Installed macOS app bundles
-    for app_dir in [Path("/Applications"), Path.home() / "Applications"]:
-        c = app_dir / "SPHERE.app" / _SIDECAR_REL
-        if _ok(c):
-            return c
-
-    # 7. PATH
-    found = shutil.which("sphere-eval")
-    if found:
-        return Path(found)
-
-    raise FileNotFoundError("sphere-eval not found")
-
-
-# ── Evaluation via sidecar subprocess ────────────────────────────────────────
-
-def _evaluate_via_sidecar(
-    binary: Path,
-    real_path: Path,
-    synth_path: Path,
-    n_attacks: int,
-    n_secrets: int,
-    n_atk_cap: int,
-    n_neighbors: int,
-    n_aux_cols: int,
-    seed: int | None,
-    skip_privacy: bool,
-    on_progress: Progress | None,
+def evaluate(
+    real_path:    Path | str,
+    synth_path:   Path | str,
+    *,
+    n_attacks:    int        = 500,
+    n_secrets:    int        = 5,
+    n_atk_cap:    int        = 2000,
+    n_neighbors:  int        = 1,
+    n_aux_cols:   int        = 20,
+    seed:         int | None = None,
+    skip_privacy: bool       = False,
+    on_progress:  Progress | None = None,
 ) -> dict:
-    cmd = [
-        str(binary),
-        "--real",        str(real_path),
-        "--synth",       str(synth_path),
-        "--n-attacks",   str(n_attacks),
-        "--n-secrets",   str(n_secrets),
-        "--n-atk-cap",   str(n_atk_cap),
-        "--n-neighbors", str(n_neighbors),
-        "--n-aux-cols",  str(n_aux_cols),
-    ]
-    if seed is not None:
-        cmd += ["--seed", str(seed)]
-    if skip_privacy:
-        cmd.append("--skip-privacy")
+    """Evaluate a real/synthetic CSV pair.
 
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    Returns a result dict matching the structure produced by the SPHERE.app
+    sidecar (nReal, nSynth, pOrig, pEnc, fidelity, privacy, …).
 
-    def _drain_stderr() -> None:
-        assert proc.stderr is not None
-        for raw in proc.stderr:
-            if not on_progress:
-                continue
-            try:
-                obj = json.loads(raw.decode(errors="replace"))
-                if obj.get("type") == "progress":
-                    on_progress(float(obj["frac"]), str(obj.get("msg", "")))
-            except Exception:
-                pass
-
-    t = threading.Thread(target=_drain_stderr, daemon=True)
-    t.start()
-    assert proc.stdout is not None
-    stdout_bytes = proc.stdout.read()
-    t.join()
-    proc.wait()
-
-    if not stdout_bytes.strip():
-        raise RuntimeError(
-            f"sphere-eval exited {proc.returncode} with no output."
-        )
-
-    result = json.loads(stdout_bytes.decode(errors="replace"))
-
-    if "error" in result:
-        raise ValueError(result["error"])
-    if proc.returncode != 0:
-        raise RuntimeError(f"sphere-eval exited {proc.returncode}.")
-
-    result.setdefault("idColsExcluded", [])
-    return result
-
-
-# ── Built-in evaluation (fallback when sphere-eval is not installed) ──────────
-
-def _evaluate_builtin(
-    real_path: Path,
-    synth_path: Path,
-    n_attacks: int,
-    n_secrets: int,
-    n_atk_cap: int,
-    n_neighbors: int,
-    n_aux_cols: int,
-    seed: int | None,
-    skip_privacy: bool,
-    on_progress: Progress | None,
-) -> dict:
+    Raises ValueError for user-visible problems (header mismatch, etc.).
+    """
     def prog(frac: float, msg: str) -> None:
         if on_progress:
             on_progress(frac, msg)
+
+    real_path  = Path(real_path)
+    synth_path = Path(synth_path)
 
     # ── Load ──────────────────────────────────────────────────────────────────
     prog(0.0, "loading")
@@ -259,7 +136,11 @@ def _evaluate_builtin(
     if skip_privacy:
         return {**base_result, "privacy": None}
 
-    # ── Privacy — pass original DataFrames so Anonymeter uses Gower distance ──
+    # ── Privacy ───────────────────────────────────────────────────────────────
+    # Pass original DataFrames (with native dtypes, including string categoricals)
+    # so Anonymeter uses its native Gower distance for mixed-type columns.
+    # Re-seed the global numpy RNG immediately before each Anonymeter call so
+    # all three baselines attack the exact same rows for a fair comparison.
     rng  = np.random.RandomState(seed_used)
     shuf = column_shuffle(real, rng)
 
@@ -320,48 +201,3 @@ def _evaluate_builtin(
             "seed":       seed_used,
         },
     }
-
-
-# ── Public API ────────────────────────────────────────────────────────────────
-
-def evaluate(
-    real_path:    Path | str,
-    synth_path:   Path | str,
-    *,
-    n_attacks:    int        = 500,
-    n_secrets:    int        = 5,
-    n_atk_cap:    int        = 2000,
-    n_neighbors:  int        = 1,
-    n_aux_cols:   int        = 20,
-    seed:         int | None = None,
-    skip_privacy: bool       = False,
-    on_progress:  Progress | None = None,
-) -> dict:
-    """Evaluate a real/synthetic CSV pair.
-
-    Prefers the sphere-eval sidecar binary (bit-exact match with SPHERE.app)
-    and falls back to built-in Anonymeter evaluation when the binary is not
-    available (standalone install without SPHERE.app).
-
-    Returns a result dict with keys: nReal, nSynth, pOrig, pEnc, fidelity,
-    privacy (or None), params.
-
-    Raises ValueError for user-visible problems (header mismatch, etc.).
-    """
-    real_abs  = Path(real_path).resolve()
-    synth_abs = Path(synth_path).resolve()
-
-    try:
-        binary = _find_sidecar()
-        return _evaluate_via_sidecar(
-            binary, real_abs, synth_abs,
-            n_attacks, n_secrets, n_atk_cap, n_neighbors, n_aux_cols,
-            seed, skip_privacy, on_progress,
-        )
-    except FileNotFoundError:
-        # sphere-eval not installed — run evaluation in-process
-        return _evaluate_builtin(
-            real_abs, synth_abs,
-            n_attacks, n_secrets, n_atk_cap, n_neighbors, n_aux_cols,
-            seed, skip_privacy, on_progress,
-        )
