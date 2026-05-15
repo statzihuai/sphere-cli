@@ -10,9 +10,10 @@
 #   3. PyInstaller produces dist/sphere-cli/sphere.
 #   4. .py sources are restored for continued development.
 #
-# Dependencies bundled: numpy, pandas, scipy, pyarrow, anonymeter.
+# Dependencies bundled: numpy, pandas, scipy, pyarrow, anonymeter, certifi.
 # numba/llvmlite intentionally NOT bundled — anonymeter's Gower kernels are
 # replaced at runtime with a vectorized numpy version (see _main.py).
+# polars intentionally NOT bundled — it is not used anywhere in the CLI.
 # NOT bundled (SPHERE AI stack not needed for CLI):
 #   matplotlib, seaborn, statsmodels, sklearn (except anonymeter's subset).
 
@@ -46,16 +47,9 @@ hiddenimports += [
     "sklearn.svm._base",   # transitive dep of linear_model._logistic
 ]
 
-for _pkg in ("anonymeter", "polars", "certifi"):
+for _pkg in ("anonymeter", "certifi"):
     tmp = collect_all(_pkg)
     datas    += tmp[0]; binaries += tmp[1]; hiddenimports += tmp[2]
-
-# polars runtime extension — explicit binary copy from the correct Python path
-import sysconfig as _sc
-_sp = _sc.get_path("platlib")
-_plr_so = os.path.join(_sp, "_polars_runtime_32", "_polars_runtime.abi3.so")
-if os.path.exists(_plr_so):
-    binaries.append((_plr_so, "_polars_runtime_32"))
 
 # ── Strip unsignable / test artefacts ─────────────────────────────────────────
 _SEP = os.sep

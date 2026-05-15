@@ -11,7 +11,6 @@ import warnings
 
 import numpy as np
 import pandas as pd
-from scipy.stats import ks_2samp
 
 warnings.filterwarnings("ignore")
 
@@ -125,6 +124,7 @@ def encode_pair(
 
 def fidelity_metrics(real: pd.DataFrame, synth: pd.DataFrame) -> dict:
     """Paper-exact Δmean / Δvar / Δcor / KS on the ±1-encoded matrix."""
+    from scipy.stats import ks_2samp
     re_, sy_, _ = encode_pair(real, synth)
     p = re_.shape[1]
     mean_r, mean_s = re_.mean(axis=0), sy_.mean(axis=0)
