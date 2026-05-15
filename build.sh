@@ -44,7 +44,21 @@ python3 -m PyInstaller sphere-cli.spec --noconfirm
 
 BINARY="dist/sphere-cli/sphere"
 
-# ── Step 3b: fix polars runtime ───────────────────────────────────────────────
+# ── Step 3b: bundle sphere-eval sidecar ──────────────────────────────────────
+# SPHERE_EVAL_SRC can be overridden (e.g. in CI where the main repo is checked
+# out alongside sphere-cli).  Default: sibling python-sidecar build output.
+SPHERE_EVAL_SRC="${SPHERE_EVAL_SRC:-../python-sidecar/dist/sphere-eval}"
+if [[ -d "$SPHERE_EVAL_SRC" && -f "$SPHERE_EVAL_SRC/sphere-eval" ]]; then
+  echo "==> Bundling sphere-eval from $SPHERE_EVAL_SRC …"
+  cp -r "$SPHERE_EVAL_SRC" "dist/sphere-cli/sphere-eval"
+  chmod +x "dist/sphere-cli/sphere-eval/sphere-eval"
+  echo "    sphere-eval bundled."
+else
+  echo "WARNING: sphere-eval not found at $SPHERE_EVAL_SRC" >&2
+  echo "         Set SPHERE_EVAL_SRC or run python-sidecar/build.sh first." >&2
+fi
+
+# ── Step 3d: fix polars runtime ───────────────────────────────────────────────
 # PyInstaller deduplicates abi3 .so files by filename and may pick up a
 # stale/incompatible version from its binary cache or from the sidecar.
 # Force-replace with the correct Python 3.14 runtime.

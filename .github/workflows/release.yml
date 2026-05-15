@@ -50,7 +50,7 @@ jobs:
     needs: check-version
     if: needs.check-version.outputs.release == 'true'
     runs-on: macos-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -77,7 +77,21 @@ jobs:
           pip install --no-deps -e "."
           pip install polars pyarrow certifi
 
+      - name: Check out main SPHERE repo (for python-sidecar)
+        uses: actions/checkout@v4
+        with:
+          repository: statzihuai/SPHERE
+          path: sphere-app
+          token: ${{ secrets.SPHERE_REPO_TOKEN || github.token }}
+
+      - name: Build sphere-eval sidecar
+        run: |
+          cd sphere-app/python-sidecar
+          bash build.sh
+
       - name: Build CLI binary
+        env:
+          SPHERE_EVAL_SRC: sphere-app/python-sidecar/dist/sphere-eval
         run: bash build.sh
 
       - name: Package tarball + installer
@@ -96,7 +110,7 @@ jobs:
     needs: check-version
     if: needs.check-version.outputs.release == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -126,7 +140,21 @@ jobs:
           pip install --no-deps -e "."
           pip install polars pyarrow certifi
 
+      - name: Check out main SPHERE repo (for python-sidecar)
+        uses: actions/checkout@v4
+        with:
+          repository: statzihuai/SPHERE
+          path: sphere-app
+          token: ${{ secrets.SPHERE_REPO_TOKEN || github.token }}
+
+      - name: Build sphere-eval sidecar
+        run: |
+          cd sphere-app/python-sidecar
+          bash build.sh
+
       - name: Build CLI binary
+        env:
+          SPHERE_EVAL_SRC: sphere-app/python-sidecar/dist/sphere-eval
         run: bash build.sh
 
       - name: Package tarball + installer
@@ -145,7 +173,7 @@ jobs:
     needs: check-version
     if: needs.check-version.outputs.release == 'true'
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -175,7 +203,21 @@ jobs:
           pip install --no-deps -e "."
           pip install polars pyarrow certifi
 
+      - name: Check out main SPHERE repo (for python-sidecar)
+        uses: actions/checkout@v4
+        with:
+          repository: statzihuai/SPHERE
+          path: sphere-app
+          token: ${{ secrets.SPHERE_REPO_TOKEN || github.token }}
+
+      - name: Build sphere-eval sidecar
+        run: |
+          cd sphere-app/python-sidecar
+          bash build.sh
+
       - name: Build CLI binary
+        env:
+          SPHERE_EVAL_SRC: sphere-app/python-sidecar/dist/sphere-eval
         run: bash build.sh
 
       - name: Package tarball + installer
