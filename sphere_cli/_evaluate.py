@@ -49,7 +49,14 @@ def evaluate(
     synth_path = Path(synth_path)
 
     # ── Load ──────────────────────────────────────────────────────────────────
-    prog(0.0, "loading")
+    import threading as _th
+    _stop = _th.Event()
+    def _spin():
+        i = 0
+        while not _stop.wait(0.3):
+            prog(0.0, "loading" + " ." * (i % 4 + 1))
+            i += 1
+    _th.Thread(target=_spin, daemon=True).start()
     import pandas as pd
     from ._core import (
         _detect_id_columns,
@@ -62,6 +69,9 @@ def evaluate(
         _run_lk,
         _run_inf,
     )
+    _stop.set()
+
+    prog(0.0, "loading")
     try:
         import pyarrow.csv as _pa_csv
         real  = _pa_csv.read_csv(str(real_path)).to_pandas()
@@ -142,7 +152,13 @@ def evaluate(
     # progress bar mid-way through attack 1.  Pre-importing here (hidden inside
     # the "preparing …" step) absorbs that cost before the per-call progress
     # tracking begins.
-    prog(0.16, "loading privacy evaluation tools … (first run only)")
+    _stop2 = _th.Event()
+    def _spin2():
+        i = 0
+        while not _stop2.wait(0.3):
+            prog(0.16, "loading privacy evaluation tools" + " ." * (i % 4 + 1))
+            i += 1
+    _th.Thread(target=_spin2, daemon=True).start()
     try:
         from anonymeter.evaluators import SinglingOutEvaluator as _SO  # noqa: F401
         from anonymeter.evaluators import LinkabilityEvaluator  as _LK  # noqa: F401
@@ -150,6 +166,8 @@ def evaluate(
         _patch_anonymeter_nn()
     except Exception:
         pass
+    _stop2.set()
+    prog(0.16, "loading privacy evaluation tools … (first run only)")
 
     # ── Privacy ───────────────────────────────────────────────────────────────
     # Pass original DataFrames (with native dtypes, including string categoricals)

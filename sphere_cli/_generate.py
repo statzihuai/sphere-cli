@@ -46,9 +46,21 @@ def generate(
     output_path = Path(output_path)
 
     # ── Load ──────────────────────────────────────────────────────────────────
-    prog(0.0, "loading")
+    # Animate while pandas/pyarrow load from disk — their .so imports release
+    # the GIL (pure I/O), so the spinner thread actually gets to run.
+    import threading as _th
+    _stop = _th.Event()
+    def _spin():
+        i = 0
+        while not _stop.wait(0.3):
+            prog(0.0, "loading" + " ." * (i % 4 + 1))
+            i += 1
+    _th.Thread(target=_spin, daemon=True).start()
     import pandas as pd
     from ._core import _detect_id_columns
+    _stop.set()
+
+    prog(0.0, "loading")
     try:
         import pyarrow.csv as _pa_csv
         df = _pa_csv.read_csv(str(input_path)).to_pandas()
