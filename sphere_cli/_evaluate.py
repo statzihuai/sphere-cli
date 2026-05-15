@@ -1,198 +1,186 @@
-"""Evaluate fidelity and privacy of a synthetic dataset."""
+"""Evaluate fidelity and privacy by delegating to the sphere-eval sidecar binary.
+
+The CLI shells out to the same PyInstaller-bundled sphere-eval binary that the
+SPHERE.app uses, guaranteeing bit-exact results between the CLI and the app.
+
+Binary discovery order (first match wins):
+  1. SPHERE_EVAL_BIN environment variable — explicit override
+  2. Next to the running executable (for PyInstaller bundles that co-locate both)
+  3. Development tree: python-sidecar/dist/sphere-eval/sphere-eval
+  4. /Applications/SPHERE.app (standard macOS install)
+  5. ~/Applications/SPHERE.app (user-level macOS install)
+  6. sphere-eval on PATH
+"""
 from __future__ import annotations
 
+import json
+import os
+import shutil
+import subprocess
+import sys
+import threading
 from pathlib import Path
 from typing import Callable
 
-import numpy as np
-import pandas as pd
-
-from ._core import (
-    _detect_id_columns,
-    encode_pair,
-    fidelity_metrics,
-    column_shuffle,
-    normalize,
-    _run_so,
-    _run_lk,
-    _run_inf,
-)
-
 Progress = Callable[[float, str], None]
-_MAX_FIDELITY_N = 50_000
 
 
-def evaluate(
-    real_path: Path | str,
-    synth_path: Path | str,
-    *,
-    n_attacks: int = 500,
-    n_secrets: int = 5,
-    n_atk_cap: int = 2000,
-    n_neighbors: int = 1,
-    n_aux_cols: int = 20,
-    seed: int | None = None,
-    skip_privacy: bool = False,
-    on_progress: Progress | None = None,
-) -> dict:
-    """Evaluate a real/synthetic CSV pair.
+# ── Binary discovery ──────────────────────────────────────────────────────────
 
-    Returns a result dict matching the structure produced by the
-    SPHERE.app sidecar (nReal, nSynth, pOrig, pEnc, fidelity, privacy, …).
+def _find_sidecar() -> Path:
+    """Return the path to the sphere-eval binary, or raise FileNotFoundError."""
 
-    Raises ValueError for user-visible problems (header mismatch, etc.).
-    """
-    def prog(frac: float, msg: str) -> None:
-        if on_progress:
-            on_progress(frac, msg)
+    # 1. Explicit env-var override
+    env = os.environ.get("SPHERE_EVAL_BIN")
+    if env:
+        p = Path(env)
+        if p.is_file() and os.access(p, os.X_OK):
+            return p
 
-    real_path  = Path(real_path)
-    synth_path = Path(synth_path)
+    # 2. Next to the current executable (works when both are co-located in a bundle)
+    exe = Path(sys.executable)
+    if getattr(sys, "frozen", False):
+        # PyInstaller frozen: _MEIPASS is the temp extraction dir; check there
+        # and also the directory that holds the outer 'sphere' binary.
+        bases = [Path(sys._MEIPASS), exe.parent]
+    else:
+        bases = [exe.parent]
+    for base in bases:
+        candidate = base / "sidecar" / "sphere-eval" / "sphere-eval"
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate
 
-    # ── Load ──────────────────────────────────────────────────────────────────
-    prog(0.0, "loading")
-    try:
-        import pyarrow.csv as _pa_csv
-        real  = _pa_csv.read_csv(str(real_path)).to_pandas()
-        synth = _pa_csv.read_csv(str(synth_path)).to_pandas()
-    except Exception:
-        real  = pd.read_csv(real_path,  low_memory=False)
-        synth = pd.read_csv(synth_path, low_memory=False)
+    # 3. Dev tree: relative to this source file
+    #    sphere-cli/sphere_cli/_evaluate.py  →  ../../python-sidecar/dist/…
+    here = Path(__file__).parent        # sphere_cli/
+    dev  = here.parent.parent / "python-sidecar" / "dist" / "sphere-eval" / "sphere-eval"
+    if dev.is_file() and os.access(dev, os.X_OK):
+        return dev
 
-    # ── Header check ──────────────────────────────────────────────────────────
-    if list(real.columns) != list(synth.columns):
-        raise ValueError(
-            f"Header mismatch:\n  real:  {list(real.columns[:8])}\n"
-            f"  synth: {list(synth.columns[:8])}"
+    # 4–5. macOS app bundles
+    for app_path in [
+        Path("/Applications/SPHERE.app"),
+        Path.home() / "Applications" / "SPHERE.app",
+    ]:
+        candidate = (
+            app_path / "Contents" / "Resources" / "sidecar" / "sphere-eval" / "sphere-eval"
         )
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate
 
-    # ── Drop ID columns ───────────────────────────────────────────────────────
-    id_col_set = _detect_id_columns(real)
-    id_col_names: list[str] = []
-    if id_col_set:
-        id_col_names = [real.columns[i] for i in sorted(id_col_set)]
-        real  = real.drop(columns=id_col_names)
-        synth = synth.drop(columns=id_col_names)
+    # 6. PATH
+    found = shutil.which("sphere-eval")
+    if found:
+        return Path(found)
 
-    # ── Column-set validation ─────────────────────────────────────────────────
-    real_cols, synth_cols = set(real.columns), set(synth.columns)
-    if real_cols != synth_cols:
-        only_real  = sorted(real_cols  - synth_cols)
-        only_synth = sorted(synth_cols - real_cols)
-        parts = ["Column mismatch after ID removal — are these a matched pair?"]
-        if only_real:
-            parts.append(f"  Only in real  ({len(only_real)}): {only_real[:8]}")
-        if only_synth:
-            parts.append(f"  Only in synth ({len(only_synth)}): {only_synth[:8]}")
-        raise ValueError("\n".join(parts))
-
-    # ── Align numeric dtypes ──────────────────────────────────────────────────
-    for col in real.columns:
-        if pd.api.types.is_numeric_dtype(real[col]) or pd.api.types.is_numeric_dtype(synth[col]):
-            real[col]  = pd.to_numeric(real[col],  errors='coerce').astype(float)
-            synth[col] = pd.to_numeric(synth[col], errors='coerce').astype(float)
-
-    seed_used = seed if seed is not None else int(
-        np.random.SeedSequence().entropy & 0xFFFFFFFF
+    raise FileNotFoundError(
+        "sphere-eval binary not found.\n"
+        "  • Install SPHERE.app in /Applications, or\n"
+        "  • Set SPHERE_EVAL_BIN=/path/to/sphere-eval, or\n"
+        "  • Build the sidecar: cd python-sidecar && ./build.sh"
     )
 
-    # ── Fidelity ──────────────────────────────────────────────────────────────
-    if len(real) > _MAX_FIDELITY_N:
-        sub      = np.random.RandomState(seed_used).choice(len(real), _MAX_FIDELITY_N, replace=False)
-        real_fid  = real.iloc[sub].reset_index(drop=True)
-        synth_fid = synth.iloc[sub].reset_index(drop=True)
-        prog(0.04, f"subsampled {_MAX_FIDELITY_N:,} / {len(real):,} rows for fidelity")
-    else:
-        real_fid, synth_fid = real, synth
 
-    prog(0.05, "fidelity")
-    fid = fidelity_metrics(real_fid, synth_fid)
-    real_fid = synth_fid = None  # free memory
-    prog(0.15, "fidelity done")
+# ── Public API ────────────────────────────────────────────────────────────────
 
-    re_, se_, enc_cols = encode_pair(real, synth)
-    base_result = {
-        "nReal":           len(real),
-        "nSynth":          len(synth),
-        "pOrig":           real.shape[1],
-        "pEnc":            re_.shape[1],
-        "numericCols":     sum(1 for c in real.columns if pd.api.types.is_numeric_dtype(real[c])),
-        "categoricalCols": sum(1 for c in real.columns if not pd.api.types.is_numeric_dtype(real[c])),
-        "idColsExcluded":  id_col_names,
-        "fidelity":        fid,
-    }
+def evaluate(
+    real_path:    Path | str,
+    synth_path:   Path | str,
+    *,
+    n_attacks:    int       = 500,
+    n_secrets:    int       = 5,
+    n_atk_cap:    int       = 2000,
+    n_neighbors:  int       = 1,
+    n_aux_cols:   int       = 20,
+    seed:         int | None = None,
+    skip_privacy: bool      = False,
+    on_progress:  Progress | None = None,
+) -> dict:
+    """Evaluate a real/synthetic CSV pair via the sphere-eval binary.
 
+    Delegates entirely to the same PyInstaller-bundled sphere-eval binary used
+    by the SPHERE.app, guaranteeing identical results between CLI and app.
+
+    Returns a result dict with keys: nReal, nSynth, pOrig, pEnc, fidelity,
+    privacy (or None), params, engine.
+
+    Raises FileNotFoundError if sphere-eval cannot be located.
+    Raises ValueError for user-visible problems reported by the binary
+    (header mismatch, column mismatch, etc.).
+    Raises RuntimeError for unexpected binary failures.
+    """
+    binary    = _find_sidecar()
+    real_abs  = Path(real_path).resolve()
+    synth_abs = Path(synth_path).resolve()
+
+    cmd = [
+        str(binary),
+        "--real",         str(real_abs),
+        "--synth",        str(synth_abs),
+        "--n-attacks",    str(n_attacks),
+        "--n-secrets",    str(n_secrets),
+        "--n-atk-cap",    str(n_atk_cap),
+        "--n-neighbors",  str(n_neighbors),
+        "--n-aux-cols",   str(n_aux_cols),
+    ]
+    if seed is not None:
+        cmd += ["--seed", str(seed)]
     if skip_privacy:
-        return {**base_result, "privacy": None}
+        cmd.append("--skip-privacy")
 
-    # ── Privacy (Anonymeter) ──────────────────────────────────────────────────
-    # Pre-encode to purely numeric DataFrames so anonymeter never invokes its
-    # Numba-dependent mixed-types Gower kNN kernel.
-    real_enc  = pd.DataFrame(re_, columns=enc_cols)
-    synth_enc = pd.DataFrame(se_, columns=enc_cols)
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
 
-    rng  = np.random.RandomState(seed_used)
-    shuf = column_shuffle(real_enc, rng)
+    # Read stderr in a background thread so progress lines are forwarded
+    # immediately without blocking the stdout read.
+    def _drain_stderr() -> None:
+        assert proc.stderr is not None
+        for raw in proc.stderr:
+            if not on_progress:
+                continue
+            try:
+                obj = json.loads(raw.decode(errors="replace"))
+                if obj.get("type") == "progress":
+                    on_progress(float(obj["frac"]), str(obj.get("msg", "")))
+            except Exception:
+                pass  # non-JSON stderr lines (warnings, etc.) are silently ignored
 
-    # Re-seed the global numpy RNG immediately before each attack triple so that
-    # Anonymeter's internal np.random.choice (attack-row sampling) is identical
-    # across the (real, shuf, synth) calls — making the three baselines attack
-    # the exact same rows for a fair apples-to-apples comparison, and making
-    # results reproducible regardless of prior global-RNG consumption.
-    prog(0.20, "singling out …")
-    np.random.seed(seed_used)
-    so_real  = _run_so(real_enc, real_enc,  n_attacks, n_atk_cap)
-    np.random.seed(seed_used)
-    so_shuf  = _run_so(real_enc, shuf,      n_attacks, n_atk_cap)
-    np.random.seed(seed_used)
-    so_synth = _run_so(real_enc, synth_enc, n_attacks, n_atk_cap)
+    t = threading.Thread(target=_drain_stderr, daemon=True)
+    t.start()
 
-    prog(0.45, "linkability …")
-    np.random.seed(seed_used)
-    lk_real  = _run_lk(real_enc, real_enc,  n_attacks, n_atk_cap, n_neighbors, n_aux_cols, np.random.RandomState(seed_used))
-    np.random.seed(seed_used)
-    lk_shuf  = _run_lk(real_enc, shuf,      n_attacks, n_atk_cap, n_neighbors, n_aux_cols, np.random.RandomState(seed_used))
-    np.random.seed(seed_used)
-    lk_synth = _run_lk(real_enc, synth_enc, n_attacks, n_atk_cap, n_neighbors, n_aux_cols, np.random.RandomState(seed_used))
+    assert proc.stdout is not None
+    stdout_bytes = proc.stdout.read()
+    t.join()
+    proc.wait()
 
-    prog(0.65, "inference …")
-    np.random.seed(seed_used)
-    inf_real  = _run_inf(real_enc, real_enc,  n_attacks, n_atk_cap, np.random.RandomState(seed_used), n_secrets)
-    np.random.seed(seed_used)
-    inf_shuf  = _run_inf(real_enc, shuf,      n_attacks, n_atk_cap, np.random.RandomState(seed_used), n_secrets)
-    np.random.seed(seed_used)
-    inf_synth = _run_inf(real_enc, synth_enc, n_attacks, n_atk_cap, np.random.RandomState(seed_used), n_secrets)
+    if not stdout_bytes.strip():
+        raise RuntimeError(
+            f"sphere-eval exited with code {proc.returncode} and produced no output."
+        )
 
-    privacy = {
-        "singlingOut": {
-            "rReal": so_real, "rShuffle": so_shuf, "rSynth": so_synth,
-            "score": normalize(so_synth, so_real, so_shuf),
-        },
-        "linkability": {
-            "rReal": lk_real, "rShuffle": lk_shuf, "rSynth": lk_synth,
-            "score": normalize(lk_synth, lk_real, lk_shuf),
-        },
-        "inference": {
-            "rReal": inf_real, "rShuffle": inf_shuf, "rSynth": inf_synth,
-            "score": normalize(inf_synth, inf_real, inf_shuf),
-        },
-    }
-    privacy["composite"] = (
-        privacy["singlingOut"]["score"]
-        + privacy["linkability"]["score"]
-        + privacy["inference"]["score"]
-    ) / 3
-    prog(1.0, "done")
+    try:
+        result = json.loads(stdout_bytes.decode(errors="replace"))
+    except json.JSONDecodeError as e:
+        raise RuntimeError(
+            f"sphere-eval produced invalid JSON: {e}\n"
+            f"Raw output: {stdout_bytes[:500]!r}"
+        ) from e
 
-    return {
-        **base_result,
-        "privacy": privacy,
-        "params": {
-            "nAttacks":   n_attacks,
-            "nSecrets":   n_secrets,
-            "nAtkCap":    n_atk_cap,
-            "nNeighbors": n_neighbors,
-            "nAuxCols":   n_aux_cols,
-            "seed":       seed_used,
-        },
-    }
+    # The binary emits {"error": "…"} on stderr and exits non-zero on failure.
+    if "error" in result:
+        msg = result["error"]
+        # Re-raise as ValueError so the CLI shows a clean error (not a traceback).
+        raise ValueError(msg)
+
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"sphere-eval exited with code {proc.returncode}."
+        )
+
+    # Normalise: older sidecar builds may omit idColsExcluded; default to []
+    result.setdefault("idColsExcluded", [])
+
+    return result
