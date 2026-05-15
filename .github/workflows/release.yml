@@ -64,14 +64,13 @@ jobs:
           # Pin numpy>=2.0 FIRST so nothing can downgrade it.
           pip install "numpy>=2.0"
           pip install cython setuptools wheel pyinstaller
-          # Install anonymeter WITHOUT its declared deps — its numpy<1.27 and
-          # numba~=0.59 constraints are overly conservative; the code runs
-          # fine on numpy 2.x and numba>=0.60.
+          # Install anonymeter WITHOUT its declared deps — its numpy<1.27 constraint
+          # is overly conservative; the code runs fine on numpy 2.x.
+          # numba is intentionally omitted: anonymeter's Gower-distance kernels are
+          # replaced at runtime with a vectorized numpy version (see _main.py),
+          # removing ~100 MB from the bundle and the LLVM cold-start delay.
           pip install --no-deps git+https://github.com/statice/anonymeter
-          # anonymeter runtime deps + real numba (>=0.60 supports numpy 2.x)
-          # for full JIT-compiled Gower-distance speed.
           pip install "pandas>=2.0" "scipy>=1.11" "scikit-learn>=1.2" "joblib>=1.2"
-          pip install "numba>=0.60"
           # Install sphere-synth itself without re-resolving deps (everything
           # is already pinned above; avoids pip picking up anonymeter's constraints).
           pip install --no-deps -e "."
@@ -113,14 +112,13 @@ jobs:
           # Pin numpy>=2.0 FIRST so nothing can downgrade it.
           pip install "numpy>=2.0"
           pip install cython setuptools wheel pyinstaller
-          # Install anonymeter WITHOUT its declared deps — its numpy<1.27 and
-          # numba~=0.59 constraints are overly conservative; the code runs
-          # fine on numpy 2.x and numba>=0.60.
+          # Install anonymeter WITHOUT its declared deps — its numpy<1.27 constraint
+          # is overly conservative; the code runs fine on numpy 2.x.
+          # numba is intentionally omitted: anonymeter's Gower-distance kernels are
+          # replaced at runtime with a vectorized numpy version (see _main.py),
+          # removing ~100 MB from the bundle and the LLVM cold-start delay.
           pip install --no-deps git+https://github.com/statice/anonymeter
-          # anonymeter runtime deps + real numba (>=0.60 supports numpy 2.x)
-          # for full JIT-compiled Gower-distance speed.
           pip install "pandas>=2.0" "scipy>=1.11" "scikit-learn>=1.2" "joblib>=1.2"
-          pip install "numba>=0.60"
           # Install sphere-synth itself without re-resolving deps (everything
           # is already pinned above; avoids pip picking up anonymeter's constraints).
           pip install --no-deps -e "."
@@ -162,14 +160,13 @@ jobs:
           # Pin numpy>=2.0 FIRST so nothing can downgrade it.
           pip install "numpy>=2.0"
           pip install cython setuptools wheel pyinstaller
-          # Install anonymeter WITHOUT its declared deps — its numpy<1.27 and
-          # numba~=0.59 constraints are overly conservative; the code runs
-          # fine on numpy 2.x and numba>=0.60.
+          # Install anonymeter WITHOUT its declared deps — its numpy<1.27 constraint
+          # is overly conservative; the code runs fine on numpy 2.x.
+          # numba is intentionally omitted: anonymeter's Gower-distance kernels are
+          # replaced at runtime with a vectorized numpy version (see _main.py),
+          # removing ~100 MB from the bundle and the LLVM cold-start delay.
           pip install --no-deps git+https://github.com/statice/anonymeter
-          # anonymeter runtime deps + real numba (>=0.60 supports numpy 2.x)
-          # for full JIT-compiled Gower-distance speed.
           pip install "pandas>=2.0" "scipy>=1.11" "scikit-learn>=1.2" "joblib>=1.2"
-          pip install "numba>=0.60"
           # Install sphere-synth itself without re-resolving deps (everything
           # is already pinned above; avoids pip picking up anonymeter's constraints).
           pip install --no-deps -e "."

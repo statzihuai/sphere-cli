@@ -10,7 +10,9 @@
 #   3. PyInstaller produces dist/sphere-cli/sphere.
 #   4. .py sources are restored for continued development.
 #
-# Dependencies bundled: numpy, pandas, scipy, pyarrow, anonymeter, numba, llvmlite.
+# Dependencies bundled: numpy, pandas, scipy, pyarrow, anonymeter.
+# numba/llvmlite intentionally NOT bundled — anonymeter's Gower kernels are
+# replaced at runtime with a vectorized numpy version (see _main.py).
 # NOT bundled (SPHERE AI stack not needed for CLI):
 #   matplotlib, seaborn, statsmodels, sklearn (except anonymeter's subset).
 
@@ -44,7 +46,7 @@ hiddenimports += [
     "sklearn.svm._base",   # transitive dep of linear_model._logistic
 ]
 
-for _pkg in ("anonymeter", "polars", "certifi", "numba", "llvmlite"):
+for _pkg in ("anonymeter", "polars", "certifi"):
     tmp = collect_all(_pkg)
     datas    += tmp[0]; binaries += tmp[1]; hiddenimports += tmp[2]
 

@@ -170,6 +170,27 @@ def fidelity_metrics(real: pd.DataFrame, synth: pd.DataFrame) -> dict:
 
 # ── Privacy (Anonymeter) ──────────────────────────────────────────────────────
 
+_anon_patched = False
+
+def _patch_anonymeter_nn() -> None:
+    """Replace anonymeter's numba _nearest_neighbors with a vectorized numpy
+    version stored in sys._sphere_nn_patch by _main.py.  Applied once, on the
+    first evaluator call, after anonymeter is fully imported."""
+    global _anon_patched
+    if _anon_patched:
+        return
+    _anon_patched = True
+    try:
+        import sys
+        patch = getattr(sys, "_sphere_nn_patch", None)
+        if patch is None:
+            return
+        import anonymeter.neighbors.mixed_types_kneighbors as _m
+        _m._nearest_neighbors = patch
+    except Exception:
+        pass
+
+
 def column_shuffle(df: pd.DataFrame, rng: np.random.RandomState) -> pd.DataFrame:
     out = df.copy()
     for c in out.columns:
@@ -189,6 +210,7 @@ def normalize(raw: float, r_real: float, r_shuf: float) -> float:
 
 def _run_so(ori, syn, n_attacks: int, n_atk_cap: int) -> float:
     from anonymeter.evaluators import SinglingOutEvaluator
+    _patch_anonymeter_nn()
     n_atk = min(n_atk_cap, len(ori))
     ev = SinglingOutEvaluator(
         ori.head(n_atk).copy(), syn.head(n_atk).copy(),
@@ -200,6 +222,7 @@ def _run_so(ori, syn, n_attacks: int, n_atk_cap: int) -> float:
 
 def _run_lk(ori, syn, n_attacks, n_atk_cap, n_neighbors, n_aux_cols, rng) -> float:
     from anonymeter.evaluators import LinkabilityEvaluator
+    _patch_anonymeter_nn()
     n_atk = min(n_atk_cap, len(ori))
     cols  = list(ori.columns)
     pool  = max(2, min(n_aux_cols, len(cols)))
@@ -217,6 +240,7 @@ def _run_lk(ori, syn, n_attacks, n_atk_cap, n_neighbors, n_aux_cols, rng) -> flo
 
 def _run_inf(ori, syn, n_attacks, n_atk_cap, rng, n_secrets=5) -> float:
     from anonymeter.evaluators import InferenceEvaluator
+    _patch_anonymeter_nn()
     n_atk  = min(n_atk_cap, len(ori))
     cols   = list(ori.columns)
     if not cols:
