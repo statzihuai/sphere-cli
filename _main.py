@@ -5,9 +5,10 @@ multiprocessing.freeze_support()  # must be first for PyInstaller + spawn
 
 import sys
 
-# Print something immediately so the terminal isn't silent during .so loading.
-# The \r lets the next real output line overwrite this message.
-if getattr(sys, "frozen", False):
+# For privacy-heavy commands, print something immediately so the terminal
+# isn't silent while anonymeter/sklearn .so files load from disk on a cold
+# cache.  The \r lets the next real output line overwrite this message cleanly.
+if getattr(sys, "frozen", False) and len(sys.argv) > 1 and sys.argv[1] in ("evaluate", "demo"):
     sys.stdout.write("sphere  loading … (first run is slow — next runs are instant)\r")
     sys.stdout.flush()
 
