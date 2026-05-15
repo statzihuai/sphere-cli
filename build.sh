@@ -44,19 +44,6 @@ python3 -m PyInstaller sphere-cli.spec --noconfirm
 
 BINARY="dist/sphere-cli/sphere"
 
-# ── Step 3b: fix polars runtime ───────────────────────────────────────────────
-# PyInstaller deduplicates abi3 .so files by filename and may pick up a
-# stale/incompatible version from its binary cache or from the sidecar.
-# Force-replace with the correct Python 3.14 runtime.
-PLR_SRC="$(python3 -c "import _polars_runtime_32._polars_runtime as m; print(m.__file__)")"
-PLR_DST="dist/sphere-cli/_internal/_polars_runtime_32/_polars_runtime.abi3.so"
-if [[ -f "$PLR_SRC" && -f "$PLR_DST" ]]; then
-  if ! cmp -s "$PLR_SRC" "$PLR_DST"; then
-    echo "==> Replacing polars runtime with correct Python 3.14 version …"
-    cp "$PLR_SRC" "$PLR_DST"
-  fi
-fi
-
 SIZE=$(du -sh "dist/sphere-cli" | cut -f1)
 echo "    Bundle size: $SIZE"
 
