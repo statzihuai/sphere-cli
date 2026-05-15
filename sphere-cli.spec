@@ -47,7 +47,7 @@ hiddenimports += [
     "sklearn.svm._base",   # transitive dep of linear_model._logistic
 ]
 
-for _pkg in ("anonymeter", "certifi"):
+for _pkg in ("anonymeter", "polars", "certifi"):
     tmp = collect_all(_pkg)
     datas    += tmp[0]; binaries += tmp[1]; hiddenimports += tmp[2]
 
@@ -98,7 +98,7 @@ a = Analysis(
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=["hooks"],
-    runtime_hooks=[],
+    runtime_hooks=["hooks/pyi_rth_polars.py"],
     excludes=[
         # SPHERE AI analysis stack — not needed for generate/evaluate/certify
         "matplotlib", "seaborn", "statsmodels",
