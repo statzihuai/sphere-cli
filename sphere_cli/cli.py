@@ -556,6 +556,7 @@ def cmd_demo(args: argparse.Namespace) -> int:  # noqa: ARG001
         try:
             result = evaluate(
                 real_path=real_path, synth_path=synth_path,
+                n_attacks=200, n_atk_cap=1000,
                 seed=None, skip_privacy=False, on_progress=_eval_prog,
             )
         except Exception as e:

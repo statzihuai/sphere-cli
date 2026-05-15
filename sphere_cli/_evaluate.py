@@ -24,6 +24,7 @@ from ._core import (
     fidelity_metrics,
     column_shuffle,
     normalize,
+    _patch_anonymeter_nn,
     _run_so,
     _run_lk,
     _run_inf,
@@ -135,6 +136,21 @@ def evaluate(
 
     if skip_privacy:
         return {**base_result, "privacy": None}
+
+    # ── Warm up anonymeter / sklearn imports ──────────────────────────────────
+    # anonymeter lazily imports sklearn.neighbors on the first evaluator call.
+    # In a frozen binary this cold-load can take several seconds and stalls the
+    # progress bar mid-way through attack 1.  Pre-importing here (hidden inside
+    # the "preparing …" step) absorbs that cost before the per-call progress
+    # tracking begins.
+    prog(0.16, "preparing …")
+    try:
+        from anonymeter.evaluators import SinglingOutEvaluator as _SO  # noqa: F401
+        from anonymeter.evaluators import LinkabilityEvaluator  as _LK  # noqa: F401
+        from anonymeter.evaluators import InferenceEvaluator    as _IE  # noqa: F401
+        _patch_anonymeter_nn()
+    except Exception:
+        pass
 
     # ── Privacy ───────────────────────────────────────────────────────────────
     # Pass original DataFrames (with native dtypes, including string categoricals)
