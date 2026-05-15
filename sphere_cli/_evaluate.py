@@ -5,11 +5,12 @@ SPHERE.app uses, guaranteeing bit-exact results between the CLI and the app.
 
 Binary discovery order (first match wins):
   1. SPHERE_EVAL_BIN environment variable — explicit override
-  2. Next to the running executable (for PyInstaller bundles that co-locate both)
-  3. Development tree: python-sidecar/dist/sphere-eval/sphere-eval
-  4. /Applications/SPHERE.app (standard macOS install)
-  5. ~/Applications/SPHERE.app (user-level macOS install)
-  6. sphere-eval on PATH
+  2. Next to the running executable (frozen bundle co-location)
+  3. Dev tree: release/mac-arm64/SPHERE.app  (freshly built, canonical reference)
+  4. Dev tree: python-sidecar/dist/sphere-eval/sphere-eval  (raw sidecar build)
+  5. /Applications/SPHERE.app  (standard macOS install)
+  6. ~/Applications/SPHERE.app  (user-level macOS install)
+  7. sphere-eval on PATH
 """
 from __future__ import annotations
 
@@ -24,51 +25,59 @@ from typing import Callable
 
 Progress = Callable[[float, str], None]
 
+_SIDECAR_REL = Path("Contents") / "Resources" / "sidecar" / "sphere-eval" / "sphere-eval"
+
 
 # ── Binary discovery ──────────────────────────────────────────────────────────
 
 def _find_sidecar() -> Path:
     """Return the path to the sphere-eval binary, or raise FileNotFoundError."""
 
+    def _ok(p: Path) -> bool:
+        return p.is_file() and os.access(p, os.X_OK)
+
     # 1. Explicit env-var override
     env = os.environ.get("SPHERE_EVAL_BIN")
-    if env:
-        p = Path(env)
-        if p.is_file() and os.access(p, os.X_OK):
-            return p
+    if env and _ok(p := Path(env)):
+        return p
 
-    # 2. Next to the current executable (works when both are co-located in a bundle)
-    exe = Path(sys.executable)
+    # 2. Frozen bundle: check _MEIPASS and the directory holding the sphere binary
     if getattr(sys, "frozen", False):
-        # PyInstaller frozen: _MEIPASS is the temp extraction dir; check there
-        # and also the directory that holds the outer 'sphere' binary.
-        bases = [Path(sys._MEIPASS), exe.parent]
-    else:
-        bases = [exe.parent]
-    for base in bases:
-        candidate = base / "sidecar" / "sphere-eval" / "sphere-eval"
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            return candidate
+        for base in [Path(sys._MEIPASS), Path(sys.executable).parent]:
+            c = base / "sidecar" / "sphere-eval" / "sphere-eval"
+            if _ok(c):
+                return c
 
-    # 3. Dev tree: relative to this source file
-    #    sphere-cli/sphere_cli/_evaluate.py  →  ../../python-sidecar/dist/…
-    here = Path(__file__).parent        # sphere_cli/
-    dev  = here.parent.parent / "python-sidecar" / "dist" / "sphere-eval" / "sphere-eval"
-    if dev.is_file() and os.access(dev, os.X_OK):
-        return dev
+    # 3 & 4. Dev tree — search up from __file__ and from the sphere binary
+    # Candidate roots: the sphere project root sits two or three levels above
+    # this file (from source) or one to two levels above the binary.
+    roots: list[Path] = []
+    here = Path(__file__).parent          # sphere_cli/ (or _internal/sphere_cli/ frozen)
+    roots += [here.parent.parent, here.parent.parent.parent]
+    if getattr(sys, "frozen", False):
+        # exe = sphere-cli/dist/sphere-cli/sphere → go up 3 to reach sphere-cli/,
+        # then one more to reach the sphere/ project root.
+        exe_root = Path(sys.executable).parent.parent.parent
+        roots += [exe_root, exe_root.parent]
 
-    # 4–5. macOS app bundles
-    for app_path in [
-        Path("/Applications/SPHERE.app"),
-        Path.home() / "Applications" / "SPHERE.app",
-    ]:
-        candidate = (
-            app_path / "Contents" / "Resources" / "sidecar" / "sphere-eval" / "sphere-eval"
-        )
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            return candidate
+    for root in roots:
+        root = root.resolve()
+        # 3. Freshly-built release app (canonical reference, same binary the app ships)
+        rel_app = root / "release" / "mac-arm64" / "SPHERE.app" / _SIDECAR_REL
+        if _ok(rel_app):
+            return rel_app
+        # 4. Raw sidecar build output
+        raw = root / "python-sidecar" / "dist" / "sphere-eval" / "sphere-eval"
+        if _ok(raw):
+            return raw
 
-    # 6. PATH
+    # 5–6. Installed macOS app bundles
+    for app_dir in [Path("/Applications"), Path.home() / "Applications"]:
+        c = app_dir / "SPHERE.app" / _SIDECAR_REL
+        if _ok(c):
+            return c
+
+    # 7. PATH
     found = shutil.which("sphere-eval")
     if found:
         return Path(found)
