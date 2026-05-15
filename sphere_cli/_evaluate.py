@@ -143,7 +143,7 @@ def evaluate(
     # progress bar mid-way through attack 1.  Pre-importing here (hidden inside
     # the "preparing …" step) absorbs that cost before the per-call progress
     # tracking begins.
-    prog(0.16, "preparing …")
+    prog(0.16, "loading privacy evaluation tools … (first run only)")
     try:
         from anonymeter.evaluators import SinglingOutEvaluator as _SO  # noqa: F401
         from anonymeter.evaluators import LinkabilityEvaluator  as _LK  # noqa: F401
