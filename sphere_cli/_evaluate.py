@@ -144,27 +144,43 @@ def evaluate(
     rng  = np.random.RandomState(seed_used)
     shuf = column_shuffle(real, rng)
 
-    prog(0.20, "singling out …")
+    # 9 anonymeter calls — progress reported before each so the bar moves
+    # continuously.  Equal spacing (0.17→1.0, 9 steps × ~0.09 each).
+    _P = [0.17, 0.26, 0.35, 0.44, 0.53, 0.62, 0.71, 0.80, 0.89]
+
+    prog(_P[0], "singling-out  1/9")
     np.random.seed(seed_used)
     so_real  = _run_so(real, real,  n_attacks, n_atk_cap)
+
+    prog(_P[1], "singling-out  2/9")
     np.random.seed(seed_used)
     so_shuf  = _run_so(real, shuf,  n_attacks, n_atk_cap)
+
+    prog(_P[2], "singling-out  3/9")
     np.random.seed(seed_used)
     so_synth = _run_so(real, synth, n_attacks, n_atk_cap)
 
-    prog(0.45, "linkability …")
+    prog(_P[3], "linkability  4/9")
     np.random.seed(seed_used)
     lk_real  = _run_lk(real, real,  n_attacks, n_atk_cap, n_neighbors, n_aux_cols, np.random.RandomState(seed_used))
+
+    prog(_P[4], "linkability  5/9")
     np.random.seed(seed_used)
     lk_shuf  = _run_lk(real, shuf,  n_attacks, n_atk_cap, n_neighbors, n_aux_cols, np.random.RandomState(seed_used))
+
+    prog(_P[5], "linkability  6/9")
     np.random.seed(seed_used)
     lk_synth = _run_lk(real, synth, n_attacks, n_atk_cap, n_neighbors, n_aux_cols, np.random.RandomState(seed_used))
 
-    prog(0.65, "inference …")
+    prog(_P[6], "inference  7/9")
     np.random.seed(seed_used)
     inf_real  = _run_inf(real, real,  n_attacks, n_atk_cap, np.random.RandomState(seed_used), n_secrets)
+
+    prog(_P[7], "inference  8/9")
     np.random.seed(seed_used)
     inf_shuf  = _run_inf(real, shuf,  n_attacks, n_atk_cap, np.random.RandomState(seed_used), n_secrets)
+
+    prog(_P[8], "inference  9/9")
     np.random.seed(seed_used)
     inf_synth = _run_inf(real, synth, n_attacks, n_atk_cap, np.random.RandomState(seed_used), n_secrets)
 

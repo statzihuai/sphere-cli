@@ -4,6 +4,13 @@ import multiprocessing
 multiprocessing.freeze_support()  # must be first for PyInstaller + spawn
 
 import sys
+
+# Print something immediately so the terminal isn't silent during .so loading.
+# The \r lets the next real output line overwrite this message.
+if getattr(sys, "frozen", False):
+    sys.stdout.write("sphere  loading …\r")
+    sys.stdout.flush()
+
 import numpy as _np
 
 
