@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sphere-synth"
-version = "0.1.16"
+version = "0.1.17"
 description = "SPHERE — generate and evaluate synthetic tabular data"
 requires-python = ">=3.10"
 dependencies = [
