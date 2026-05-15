@@ -542,9 +542,10 @@ def cmd_demo(args: argparse.Namespace) -> int:  # noqa: ARG001
             return 1
 
         _clear_line()
-        elapsed = result["elapsedMs"] / 1000
+        load_s = result.get("loadMs", 0) / 1000
+        run_s  = result.get("runMs",  result["elapsedMs"]) / 1000
         print(f"✓ {synth_path}  {result['rows']:,} rows × {result['cols']} cols"
-              f"  ({elapsed:.1f} s)  seed {result['seed']}")
+              f"  (load {load_s:.1f} s + run {run_s:.1f} s)  seed {result['seed']}")
 
         # ── Evaluate (fidelity + privacy) ─────────────────────────────────────
         print()
@@ -565,6 +566,9 @@ def cmd_demo(args: argparse.Namespace) -> int:  # noqa: ARG001
             return 1
 
         _clear_line()
+        ev_load_s = result.get("loadMs", 0) / 1000
+        ev_run_s  = result.get("runMs",  0) / 1000
+        print(f"✓ Evaluation complete  (load {ev_load_s:.1f} s + run {ev_run_s:.1f} s)")
         _print_eval_results(result)
 
     finally:

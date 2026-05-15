@@ -46,24 +46,35 @@ def generate(
     output_path = Path(output_path)
 
     # ── Load ──────────────────────────────────────────────────────────────────
-    # Animate while pandas/pyarrow load from disk — their .so imports release
-    # the GIL (pure I/O), so the spinner thread actually gets to run.
+    # Animate while packages load from disk — .so imports release the GIL
+    # (pure I/O), so the spinner thread actually gets to run.
     import threading as _th
+    _pkg = ["pandas"]
     _stop = _th.Event()
     def _spin():
         i = 0
         while not _stop.wait(0.3):
-            prog(0.0, "loading" + " ." * (i % 4 + 1))
+            prog(0.0, f"loading {_pkg[0]}" + " ." * (i % 4 + 1))
             i += 1
     _th.Thread(target=_spin, daemon=True).start()
     import pandas as pd
-    from ._core import _detect_id_columns
-    _stop.set()
-
-    prog(0.0, "loading")
+    _pkg[0] = "pyarrow"
+    _pa_csv = None
     try:
         import pyarrow.csv as _pa_csv
-        df = _pa_csv.read_csv(str(input_path)).to_pandas()
+    except ImportError:
+        pass
+    _pkg[0] = "sphere core"
+    from ._core import _detect_id_columns
+    _stop.set()
+    t_loaded = time.perf_counter()
+
+    prog(0.0, "loading done")
+    try:
+        if _pa_csv is not None:
+            df = _pa_csv.read_csv(str(input_path)).to_pandas()
+        else:
+            df = pd.read_csv(input_path, low_memory=False)
     except Exception:
         df = pd.read_csv(input_path, low_memory=False)
 
@@ -178,7 +189,10 @@ def generate(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     out_df.to_csv(output_path, index=False)
 
-    elapsed_ms = int((time.perf_counter() - t0) * 1000)
+    t_done     = time.perf_counter()
+    elapsed_ms = int((t_done - t0)      * 1000)
+    load_ms    = int((t_loaded - t0)    * 1000)
+    run_ms     = int((t_done - t_loaded)* 1000)
 
     # ── Write metadata sidecar ────────────────────────────────────────────────
     # Saved as <output>.sphere.json so that `sphere certify` can auto-load the
@@ -210,6 +224,8 @@ def generate(
         "idColDetected": len(id_col_names) > 0,
         "idColName":     ", ".join(id_col_names) if id_col_names else None,
         "elapsedMs":     elapsed_ms,
+        "loadMs":        load_ms,
+        "runMs":         run_ms,
         "seed":          actual_seed,
         "metaFile":      str(_meta_path),
     }

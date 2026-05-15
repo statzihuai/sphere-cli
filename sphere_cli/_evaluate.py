@@ -49,15 +49,25 @@ def evaluate(
     synth_path = Path(synth_path)
 
     # ── Load ──────────────────────────────────────────────────────────────────
+    import time as _time
     import threading as _th
+    _t_start = _time.perf_counter()
+    _pkg = ["pandas"]
     _stop = _th.Event()
     def _spin():
         i = 0
         while not _stop.wait(0.3):
-            prog(0.0, "loading" + " ." * (i % 4 + 1))
+            prog(0.0, f"loading {_pkg[0]}" + " ." * (i % 4 + 1))
             i += 1
     _th.Thread(target=_spin, daemon=True).start()
     import pandas as pd
+    _pkg[0] = "pyarrow"
+    try:
+        import pyarrow.csv as _pa_csv_mod
+        _pa_available = True
+    except ImportError:
+        _pa_available = False
+    _pkg[0] = "sphere core"
     from ._core import (
         _detect_id_columns,
         encode_pair,
@@ -70,12 +80,16 @@ def evaluate(
         _run_inf,
     )
     _stop.set()
+    _t_load1_end = _time.perf_counter()
 
-    prog(0.0, "loading")
+    prog(0.0, "loading done")
     try:
-        import pyarrow.csv as _pa_csv
-        real  = _pa_csv.read_csv(str(real_path)).to_pandas()
-        synth = _pa_csv.read_csv(str(synth_path)).to_pandas()
+        if _pa_available:
+            real  = _pa_csv_mod.read_csv(str(real_path)).to_pandas()
+            synth = _pa_csv_mod.read_csv(str(synth_path)).to_pandas()
+        else:
+            real  = pd.read_csv(real_path,  low_memory=False)
+            synth = pd.read_csv(synth_path, low_memory=False)
     except Exception:
         real  = pd.read_csv(real_path,  low_memory=False)
         synth = pd.read_csv(synth_path, low_memory=False)
@@ -144,30 +158,36 @@ def evaluate(
     }
 
     if skip_privacy:
-        return {**base_result, "privacy": None}
+        _load_ms = int((_t_load1_end - _t_start) * 1000)
+        _run_ms  = int((_time.perf_counter() - _t_load1_end) * 1000)
+        return {**base_result, "privacy": None,
+                "loadMs": _load_ms, "runMs": _run_ms}
 
     # ── Warm up anonymeter / sklearn imports ──────────────────────────────────
     # anonymeter lazily imports sklearn.neighbors on the first evaluator call.
     # In a frozen binary this cold-load can take several seconds and stalls the
-    # progress bar mid-way through attack 1.  Pre-importing here (hidden inside
-    # the "preparing …" step) absorbs that cost before the per-call progress
-    # tracking begins.
+    # progress bar mid-way through attack 1.  Pre-importing here absorbs that
+    # cost before the per-call progress tracking begins.
+    _t_load2_start = _time.perf_counter()
+    _pkg2 = ["anonymeter"]
     _stop2 = _th.Event()
     def _spin2():
         i = 0
         while not _stop2.wait(0.3):
-            prog(0.16, "loading privacy evaluation tools" + " ." * (i % 4 + 1))
+            prog(0.16, f"loading {_pkg2[0]}" + " ." * (i % 4 + 1))
             i += 1
     _th.Thread(target=_spin2, daemon=True).start()
     try:
         from anonymeter.evaluators import SinglingOutEvaluator as _SO  # noqa: F401
+        _pkg2[0] = "sklearn"
         from anonymeter.evaluators import LinkabilityEvaluator  as _LK  # noqa: F401
         from anonymeter.evaluators import InferenceEvaluator    as _IE  # noqa: F401
         _patch_anonymeter_nn()
     except Exception:
         pass
     _stop2.set()
-    prog(0.16, "loading privacy evaluation tools … (first run only)")
+    _t_load2_end = _time.perf_counter()
+    prog(0.16, "loading done")
 
     # ── Privacy ───────────────────────────────────────────────────────────────
     # Pass original DataFrames (with native dtypes, including string categoricals)
@@ -238,9 +258,15 @@ def evaluate(
     ) / 3
     prog(1.0, "done")
 
+    _t_end   = _time.perf_counter()
+    _load_ms = int((_t_load1_end - _t_start + _t_load2_end - _t_load2_start) * 1000)
+    _run_ms  = int((_t_end - _t_start) * 1000) - _load_ms
+
     return {
         **base_result,
         "privacy": privacy,
+        "loadMs":  _load_ms,
+        "runMs":   _run_ms,
         "params": {
             "nAttacks":   n_attacks,
             "nSecrets":   n_secrets,
