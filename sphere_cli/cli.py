@@ -26,7 +26,7 @@ _BAR_WIDTH = 28
 def _bar(frac: float, msg: str) -> str:
     filled = round(_BAR_WIDTH * min(frac, 1.0))
     bar    = "█" * filled + "░" * (_BAR_WIDTH - filled)
-    return f"\r  [{bar}] {frac * 100:5.1f}%  {msg:<45}"
+    return f"\r  [{bar}] {frac * 100:5.1f}%  {msg:<45}\033[K"
 
 def _clear_line() -> None:
     print(f"\r{' ' * (_BAR_WIDTH + 60)}\r", end="", flush=True)
