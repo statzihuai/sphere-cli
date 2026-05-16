@@ -69,18 +69,21 @@ sphere certify real.csv synth.csv -o report.html
 
 ## First run
 
-On the very first invocation the CLI loads its bundled Python libraries (pandas, pyarrow, anonymeter, sklearn) from disk. This takes a few seconds and is shown in the progress bar:
+On the very first invocation the CLI cold-loads its bundled Python libraries (pandas, pyarrow, anonymeter, sklearn) from disk. On Apple Silicon this typically takes **15–25 seconds** and is shown in the progress bar as each library finishes:
 
 ```
 Generating synthetic data from nhanes_sample.csv …
-  [█░░░░░░░░░░░░░░░░]   3.0%  ✓ pandas  (2341 ms)
-  [██░░░░░░░░░░░░░░░]   6.0%  ✓ pyarrow  (891 ms)
-  [███░░░░░░░░░░░░░░]   9.0%  ✓ sphere core  (743 ms)
+  [░░░░░░░░░░░░░░░░░]   0.0%  loading pandas . .
+  [█░░░░░░░░░░░░░░░░]   3.0%  ✓ pandas  (12.4 s)
+  [██░░░░░░░░░░░░░░░]   6.0%  ✓ pyarrow  (3.1 s)
+  [███░░░░░░░░░░░░░░]   9.0%  ✓ sphere core  (1.8 s)
   …
-✓ synth.csv  4,899 rows × 18 cols  (load 4.0 s + run 13.5 s)  seed 3721018536
+✓ synth.csv  4,899 rows × 18 cols  (load 17.4 s + run 1.8 s)  seed 3721018536
 ```
 
-Subsequent runs in the same session skip the load entirely. The timing line shows **load** (library startup) and **run** (actual SPHERE computation) separately so you know which part is slow.
+Subsequent calls in the same session skip loading entirely. The timing line always shows **load** (library startup) and **run** (actual SPHERE computation) separately so you can see which part is slow.
+
+> Exact times vary by machine, OS page cache state, and whether the binary has been run recently.
 
 ---
 
@@ -99,17 +102,19 @@ SPHERE demo — built-in NHANES dataset (4,899 rows × 18 cols, continuous + cat
 ────────────────────────────────────────────────────
 
 Generating synthetic data from nhanes_sample.csv …
-  [█░░░░░░░░░░░░░░░░]   3.0%  ✓ pandas  (2341 ms)
-  [██░░░░░░░░░░░░░░░]   6.0%  ✓ pyarrow  (891 ms)
-  [███░░░░░░░░░░░░░░]   9.0%  ✓ sphere core  (743 ms)
+  [░░░░░░░░░░░░░░░░░]   0.0%  loading pandas . .
+  [█░░░░░░░░░░░░░░░░]   3.0%  ✓ pandas  (12.4 s)
+  [██░░░░░░░░░░░░░░░]   6.0%  ✓ pyarrow  (3.1 s)
+  [███░░░░░░░░░░░░░░]   9.0%  ✓ sphere core  (1.8 s)
   [████████████████░]  85.0%  writing output
-✓ /tmp/synth.csv  4,899 rows × 18 cols  (load 4.0 s + run 13.5 s)  seed 3721018536
+✓ /tmp/synth.csv  4,899 rows × 18 cols  (load 17.4 s + run 1.8 s)  seed 3721018536
 
 Evaluating nhanes_sample.csv vs synth.csv …
-  [████░░░░░░░░░░░░░]  17.0%  ✓ anonymeter  (1013 ms)
-  [████░░░░░░░░░░░░░]  18.0%  ✓ sklearn  (284 ms)
+  [████░░░░░░░░░░░░░]  16.0%  loading anonymeter . .
+  [████░░░░░░░░░░░░░]  17.0%  ✓ anonymeter  (3.2 s)
+  [█████░░░░░░░░░░░░]  18.0%  ✓ sklearn  (0.8 s)
   [█████████████████]  89.0%  inference  9/9
-✓ Evaluation complete  (load 1.3 s + run 18.4 s)
+✓ Evaluation complete  (load 4.0 s + run 14.2 s)
 
   Fidelity
   ────────────────────────────────────
