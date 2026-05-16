@@ -49,6 +49,9 @@ sh install.sh --uninstall
 ## Quick start
 
 ```sh
+# Try the built-in demo (no data needed)
+sphere demo
+
 # Activate your license (once)
 sphere license activate sphere_xxxxxxxxxxxxxxxxxxxx
 
@@ -64,7 +67,69 @@ sphere certify real.csv synth.csv -o report.html
 
 ---
 
+## First run
+
+On the very first invocation the CLI loads its bundled Python libraries (pandas, pyarrow, anonymeter, sklearn) from disk. This takes a few seconds and is shown in the progress bar:
+
+```
+Generating synthetic data from nhanes_sample.csv …
+  [█░░░░░░░░░░░░░░░░]   3.0%  ✓ pandas  (2341 ms)
+  [██░░░░░░░░░░░░░░░]   6.0%  ✓ pyarrow  (891 ms)
+  [███░░░░░░░░░░░░░░]   9.0%  ✓ sphere core  (743 ms)
+  …
+✓ synth.csv  4,899 rows × 18 cols  (load 4.0 s + run 13.5 s)  seed 3721018536
+```
+
+Subsequent runs in the same session skip the load entirely. The timing line shows **load** (library startup) and **run** (actual SPHERE computation) separately so you know which part is slow.
+
+---
+
 ## Commands
+
+### `sphere demo`
+
+Run SPHERE end-to-end on the built-in NHANES sample dataset (4,899 rows × 18 columns, mix of continuous and categorical variables). No data or license required — good for testing an installation.
+
+```sh
+sphere demo
+```
+
+```
+SPHERE demo — built-in NHANES dataset (4,899 rows × 18 cols, continuous + categorical)
+────────────────────────────────────────────────────
+
+Generating synthetic data from nhanes_sample.csv …
+  [█░░░░░░░░░░░░░░░░]   3.0%  ✓ pandas  (2341 ms)
+  [██░░░░░░░░░░░░░░░]   6.0%  ✓ pyarrow  (891 ms)
+  [███░░░░░░░░░░░░░░]   9.0%  ✓ sphere core  (743 ms)
+  [████████████████░]  85.0%  writing output
+✓ /tmp/synth.csv  4,899 rows × 18 cols  (load 4.0 s + run 13.5 s)  seed 3721018536
+
+Evaluating nhanes_sample.csv vs synth.csv …
+  [████░░░░░░░░░░░░░]  17.0%  ✓ anonymeter  (1013 ms)
+  [████░░░░░░░░░░░░░]  18.0%  ✓ sklearn  (284 ms)
+  [█████████████████]  89.0%  inference  9/9
+✓ Evaluation complete  (load 1.3 s + run 18.4 s)
+
+  Fidelity
+  ────────────────────────────────────
+  Mean           100.0  ████████████████████
+  Variance        99.7  ████████████████████
+  Correlation     95.1  ███████████████████░
+  KS              96.8  ███████████████████░
+  ────────────────────────────────────
+  Composite       97.9  ████████████████████
+
+  Privacy
+  ────────────────────────────────────
+  Singling Out   100.0  ████████████████████
+  Linkability     97.5  ███████████████████░
+  Inference       96.8  ███████████████████░
+  ────────────────────────────────────
+  Composite       98.1  ████████████████████
+```
+
+---
 
 ### `sphere license`
 
@@ -98,6 +163,8 @@ Options:
 
 A `.sphere.json` provenance file is written alongside every output CSV and is automatically read by `sphere certify`.
 
+---
+
 ### `sphere evaluate`
 
 ```
@@ -105,8 +172,13 @@ sphere evaluate <real.csv> <synth.csv> [options]
 
 Options:
   --skip-privacy           Skip privacy metrics (faster)
+  --seed INT               Fix the random seed for reproducible attack results
   --json                   Machine-readable JSON output
 ```
+
+Reports four fidelity metrics (mean, variance, correlation, KS) and three privacy metrics (singling-out, linkability, inference), each scored 0–100. Scores are normalised against a column-shuffled baseline so 100 = no measurable privacy leakage relative to a random permutation of the data.
+
+---
 
 ### `sphere certify`
 
@@ -118,7 +190,7 @@ Options:
   --json                   Machine-readable JSON output
 ```
 
-Generation parameters (`k`, `seed`, `theta`, etc.) are loaded automatically from the `.sphere.json` sidecar. Pass flags explicitly to override.
+Produces a self-contained HTML certificate with fidelity and privacy scores, dataset metadata, and generation provenance. Generation parameters (`k`, `seed`, `theta`, etc.) are loaded automatically from the `.sphere.json` sidecar; pass flags explicitly to override.
 
 ---
 
@@ -127,8 +199,9 @@ Generation parameters (`k`, `seed`, `theta`, etc.) are loaded automatically from
 Every command supports `--json` for pipeline integration:
 
 ```sh
-sphere generate real.csv -o synth.csv --json | jq .fidelity
+sphere generate real.csv -o synth.csv --json | jq .seed
 sphere evaluate real.csv synth.csv --json > metrics.json
+sphere evaluate real.csv synth.csv --json | jq '.privacy.composite'
 ```
 
 ---
@@ -140,7 +213,7 @@ sphere evaluate real.csv synth.csv --json > metrics.json
 | `SPHERE_LICENSE_REQUIRED` | Set to `false` to bypass license checks (research / unlocked builds) |
 | `SPHERE_WORKER_URL` | Override the license validation endpoint |
 | `SPHERE_PREFIX` | Override install prefix |
-| `SPHERE_VERSION` | Pin a release tag, e.g. `v0.1.0` |
+| `SPHERE_VERSION` | Pin a release tag, e.g. `v0.1.38` |
 | `SPHERE_BUNDLE_URL` | Full URL to a `sphere-cli-*.tar.gz` (skip auto-detect) |
 | `SPHERE_GITHUB_REPO` | Override GitHub repo for downloads |
 
