@@ -46,30 +46,40 @@ def generate(
     output_path = Path(output_path)
 
     # ── Load ──────────────────────────────────────────────────────────────────
-    # Animate while packages load from disk — .so imports release the GIL
-    # (pure I/O), so the spinner thread actually gets to run.
+    # Single spinner thread reads shared _state so we can advance the bar
+    # once per package.  .so imports release the GIL (pure file I/O) so the
+    # spinner actually runs during each blocking import.
     import threading as _th
-    _pkg = ["pandas"]
-    _stop = _th.Event()
+
+    _state = [0.0, "loading pandas"]   # [frac, msg] — written by main thread
+    _stop  = _th.Event()
     def _spin():
-        i = 0
+        j = 0
         while not _stop.wait(0.3):
-            prog(0.0, f"loading {_pkg[0]}" + " ." * (i % 4 + 1))
-            i += 1
+            prog(_state[0], _state[1] + " ." * (j % 4 + 1))
+            j += 1
     _th.Thread(target=_spin, daemon=True).start()
+
+    _t = time.perf_counter()
     import pandas as pd
-    _pkg[0] = "pyarrow"
+    prog(0.03, f"✓ pandas  ({(time.perf_counter()-_t)*1000:.0f} ms)")
+    _state[0] = 0.03; _state[1] = "loading pyarrow"
+
+    _t = time.perf_counter()
     _pa_csv = None
     try:
         import pyarrow.csv as _pa_csv
     except ImportError:
         pass
-    _pkg[0] = "sphere core"
+    prog(0.06, f"✓ pyarrow  ({(time.perf_counter()-_t)*1000:.0f} ms)")
+    _state[0] = 0.06; _state[1] = "loading sphere core"
+
+    _t = time.perf_counter()
     from ._core import _detect_id_columns
     _stop.set()
     t_loaded = time.perf_counter()
+    prog(0.09, f"✓ sphere core  ({(t_loaded-_t)*1000:.0f} ms)")
 
-    prog(0.0, "loading done")
     try:
         if _pa_csv is not None:
             df = _pa_csv.read_csv(str(input_path)).to_pandas()
@@ -79,7 +89,7 @@ def generate(
         df = pd.read_csv(input_path, low_memory=False)
 
     n_rows, n_cols_total = len(df), len(df.columns)
-    prog(0.04, f"loaded {n_rows:,} rows × {n_cols_total} cols")
+    prog(0.09, f"loaded {n_rows:,} rows × {n_cols_total} cols")
 
     # ── ID columns ────────────────────────────────────────────────────────────
     id_col_set   = _detect_id_columns(df)

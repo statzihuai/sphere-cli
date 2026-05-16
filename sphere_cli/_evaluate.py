@@ -52,22 +52,32 @@ def evaluate(
     import time as _time
     import threading as _th
     _t_start = _time.perf_counter()
-    _pkg = ["pandas"]
-    _stop = _th.Event()
+
+    _state = [0.0, "loading pandas"]   # [frac, msg] — shared with spinner
+    _stop  = _th.Event()
     def _spin():
-        i = 0
+        j = 0
         while not _stop.wait(0.3):
-            prog(0.0, f"loading {_pkg[0]}" + " ." * (i % 4 + 1))
-            i += 1
+            prog(_state[0], _state[1] + " ." * (j % 4 + 1))
+            j += 1
     _th.Thread(target=_spin, daemon=True).start()
+
+    _t = _time.perf_counter()
     import pandas as pd
-    _pkg[0] = "pyarrow"
+    prog(0.015, f"✓ pandas  ({(_time.perf_counter()-_t)*1000:.0f} ms)")
+    _state[0] = 0.015; _state[1] = "loading pyarrow"
+
+    _t = _time.perf_counter()
+    _pa_csv_mod = None; _pa_available = False
     try:
         import pyarrow.csv as _pa_csv_mod
         _pa_available = True
     except ImportError:
-        _pa_available = False
-    _pkg[0] = "sphere core"
+        pass
+    prog(0.03, f"✓ pyarrow  ({(_time.perf_counter()-_t)*1000:.0f} ms)")
+    _state[0] = 0.03; _state[1] = "loading sphere core"
+
+    _t = _time.perf_counter()
     from ._core import (
         _detect_id_columns,
         encode_pair,
@@ -81,8 +91,8 @@ def evaluate(
     )
     _stop.set()
     _t_load1_end = _time.perf_counter()
+    prog(0.045, f"✓ sphere core  ({(_t_load1_end-_t)*1000:.0f} ms)")
 
-    prog(0.0, "loading done")
     try:
         if _pa_available:
             real  = _pa_csv_mod.read_csv(str(real_path)).to_pandas()
@@ -167,19 +177,27 @@ def evaluate(
     # anonymeter lazily imports sklearn.neighbors on the first evaluator call.
     # In a frozen binary this cold-load can take several seconds and stalls the
     # progress bar mid-way through attack 1.  Pre-importing here absorbs that
-    # cost before the per-call progress tracking begins.
+    # cost before per-call progress tracking begins.
     _t_load2_start = _time.perf_counter()
-    _pkg2 = ["anonymeter"]
-    _stop2 = _th.Event()
+    _state2 = [0.16, "loading anonymeter"]
+    _stop2  = _th.Event()
     def _spin2():
-        i = 0
+        j = 0
         while not _stop2.wait(0.3):
-            prog(0.16, f"loading {_pkg2[0]}" + " ." * (i % 4 + 1))
-            i += 1
+            prog(_state2[0], _state2[1] + " ." * (j % 4 + 1))
+            j += 1
     _th.Thread(target=_spin2, daemon=True).start()
+
+    _t = _time.perf_counter()
     try:
         from anonymeter.evaluators import SinglingOutEvaluator as _SO  # noqa: F401
-        _pkg2[0] = "sklearn"
+    except Exception:
+        pass
+    prog(0.17, f"✓ anonymeter  ({(_time.perf_counter()-_t)*1000:.0f} ms)")
+    _state2[0] = 0.17; _state2[1] = "loading sklearn"
+
+    _t = _time.perf_counter()
+    try:
         from anonymeter.evaluators import LinkabilityEvaluator  as _LK  # noqa: F401
         from anonymeter.evaluators import InferenceEvaluator    as _IE  # noqa: F401
         _patch_anonymeter_nn()
@@ -187,7 +205,7 @@ def evaluate(
         pass
     _stop2.set()
     _t_load2_end = _time.perf_counter()
-    prog(0.16, "loading done")
+    prog(0.18, f"✓ sklearn  ({(_t_load2_end-_t)*1000:.0f} ms)")
 
     # ── Privacy ───────────────────────────────────────────────────────────────
     # Pass original DataFrames (with native dtypes, including string categoricals)
@@ -197,9 +215,9 @@ def evaluate(
     rng  = np.random.RandomState(seed_used)
     shuf = column_shuffle(real, rng)
 
-    # 9 anonymeter calls — progress reported before each so the bar moves
-    # continuously.  Equal spacing (0.17→1.0, 9 steps × ~0.09 each).
-    _P = [0.17, 0.26, 0.35, 0.44, 0.53, 0.62, 0.71, 0.80, 0.89]
+    # 9 anonymeter calls — progress bar spans 19 %→89 % (2 % reserved for
+    # the loading phase above; attacks are evenly spaced within that range).
+    _P = [0.19, 0.28, 0.37, 0.46, 0.55, 0.64, 0.73, 0.82, 0.89]
 
     prog(_P[0], "singling-out  1/9")
     np.random.seed(seed_used)
