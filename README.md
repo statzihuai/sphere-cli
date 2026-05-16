@@ -160,7 +160,7 @@ sphere generate <real.csv> [options]
 Options:
   -o, --output PATH        Output CSV path (default: <input>_sphere.csv)
   -n, --rows INT           Number of synthetic rows (default: same as input)
-  -k INT                   SPHERE rotations (default: 2)
+  -k INT                   Synthesis depth (default: 2)
   --seed INT               Random seed for reproducibility
   --mix-prob FLOAT         Mixture probability 0–1 (default: 0.75)
   --json                   Machine-readable JSON output
