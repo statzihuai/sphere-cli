@@ -1,6 +1,6 @@
 {
   "name": "sphere-cli",
-  "version": "0.1.38",
+  "version": "0.1.39",
   "description": "SPHERE CLI — synthetic data generation, evaluation, and certification",
   "keywords": ["synthetic-data", "privacy", "cli", "data-science"],
   "homepage": "https://github.com/statzihuai/sphere-cli",
@@ -16,12 +16,17 @@
   "scripts": {
     "postinstall": "node scripts/postinstall.js"
   },
+  "dependencies": {
+    "bytenode": "^1.5.7"
+  },
   "files": [
     "bin/",
-    "scripts/"
+    "examples/",
+    "scripts/postinstall.js",
+    "sphere-node.js"
   ],
   "engines": {
-    "node": ">=16"
+    "node": ">=18.0.0"
   },
   "os": ["darwin", "linux"],
   "cpu": ["arm64", "x64"]
