@@ -1,6 +1,6 @@
 {
   "name": "sphere-cli",
-  "version": "0.1.39",
+  "version": "0.1.40",
   "description": "SPHERE CLI — synthetic data generation, evaluation, and certification",
   "keywords": ["synthetic-data", "privacy", "cli", "data-science"],
   "homepage": "https://github.com/statzihuai/sphere-cli",
@@ -11,7 +11,7 @@
   },
   "license": "SEE LICENSE IN LICENSE",
   "bin": {
-    "sphere": "./bin/sphere.js"
+    "sphere": "bin/sphere.js"
   },
   "scripts": {
     "postinstall": "node scripts/postinstall.js"
