@@ -4,15 +4,12 @@
 /**
  * sphere — CLI entry point.
  *
- * This wrapper handles argument parsing, progress display, and license checks,
- * then delegates generation to sphere-node.jsc (V8 bytecode, bytenode-loaded).
- *
  * Commands:
  *   sphere generate  <input.csv>  -o <output.csv>  [options]
- *   sphere license   activate|status|clear
+ *   sphere evaluate  <real.csv>   <synth.csv>       [options]
+ *   sphere certify   <real.csv>   <synth.csv>  -o <cert.html>  [options]
  *   sphere demo
- *   sphere evaluate  — not available in this version (requires Python sidecar)
- *   sphere certify   — not available in this version (requires Python sidecar)
+ *   sphere license   activate|status|clear
  */
 
 const { spawn } = require('child_process');
@@ -23,6 +20,8 @@ const os     = require('os');
 
 const PKG_DIR        = path.join(__dirname, '..');
 const SPHERE_NODE_JS = path.join(PKG_DIR, 'sphere-node.js');
+const EVALUATE_PY    = path.join(PKG_DIR, 'scripts', 'evaluate.py');
+const CERTIFY_PY     = path.join(PKG_DIR, 'scripts', 'certify.py');
 const VERSION        = require(path.join(PKG_DIR, 'package.json')).version;
 
 // ── License ───────────────────────────────────────────────────────────────────
@@ -150,6 +149,132 @@ function clearLine() {
   process.stderr.write(`\r${' '.repeat(BAR_WIDTH + 60)}\r`);
 }
 
+// ── Score bar (for evaluate output) ──────────────────────────────────────────
+
+function scoreBar(score, width = 20) {
+  const filled = Math.round(width * score / 100);
+  return '█'.repeat(filled) + '░'.repeat(width - filled);
+}
+
+function printEvalResults(result) {
+  const fid  = result.fidelity;
+  const priv = result.privacy;
+  const sep  = '─'.repeat(36);
+
+  process.stdout.write('\n');
+  process.stdout.write('  Fidelity\n');
+  process.stdout.write(`  ${sep}\n`);
+  for (const [label, key] of [
+    ['Mean',        'meanScore'],
+    ['Variance',    'varScore'],
+    ['Correlation', 'corScore'],
+    ['KS',          'ksScore'],
+  ]) {
+    const v = fid[key];
+    process.stdout.write(`  ${label.padEnd(14)} ${v.toFixed(1).padStart(5)}  ${scoreBar(v)}\n`);
+  }
+  process.stdout.write(`  ${sep}\n`);
+  const fc = fid.composite;
+  process.stdout.write(`  ${'Composite'.padEnd(14)} ${fc.toFixed(1).padStart(5)}  ${scoreBar(fc)}\n`);
+
+  if (priv) {
+    process.stdout.write('\n');
+    process.stdout.write('  Privacy\n');
+    process.stdout.write(`  ${sep}\n`);
+    for (const [label, key] of [
+      ['Singling Out', 'singlingOut'],
+      ['Linkability',  'linkability'],
+      ['Inference',    'inference'],
+    ]) {
+      const v = priv[key].score;
+      process.stdout.write(`  ${label.padEnd(14)} ${v.toFixed(1).padStart(5)}  ${scoreBar(v)}\n`);
+    }
+    process.stdout.write(`  ${sep}\n`);
+    const pc = priv.composite;
+    process.stdout.write(`  ${'Composite'.padEnd(14)} ${pc.toFixed(1).padStart(5)}  ${scoreBar(pc)}\n`);
+  } else if (result.privacy === null) {
+    process.stdout.write('\n  Privacy: skipped (--skip-privacy)\n');
+  }
+
+  process.stdout.write('\n');
+  const excluded = result.idColsExcluded || [];
+  const exclNote = excluded.length ? `  (${excluded.length} ID col${excluded.length > 1 ? 's' : ''} excluded)` : '';
+  process.stdout.write(
+    `  ${(result.nReal || 0).toLocaleString()} real rows \xd7 ${result.pOrig || '?'} cols` +
+    `  vs  ${(result.nSynth || 0).toLocaleString()} synthetic rows${exclNote}\n`,
+  );
+  process.stdout.write('\n');
+}
+
+// ── Python runner (shared by evaluate + certify) ──────────────────────────────
+
+function findPython() {
+  // Try python3 first, then python
+  for (const bin of ['python3', 'python']) {
+    try {
+      const { execFileSync } = require('child_process');
+      const out = execFileSync(bin, ['--version'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+      if (out.includes('Python 3')) return bin;
+    } catch { /* try next */ }
+  }
+  return null;
+}
+
+function runPythonScript(script, scriptArgs, { json: jsonMode = false } = {}) {
+  return new Promise((resolve) => {
+    const python = findPython();
+    if (!python) {
+      process.stderr.write(
+        'Error: Python 3 not found. Evaluation requires Python 3.10+.\n' +
+        '       Install Python from https://python.org and retry.\n',
+      );
+      process.exit(1);
+    }
+
+    const proc = spawn(python, [script, ...scriptArgs], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+    let resultLine = '';
+    let errorLine  = '';
+
+    proc.stdout.on('data', (d) => { resultLine += d.toString(); });
+
+    proc.stderr.on('data', (d) => {
+      for (const line of d.toString().split('\n')) {
+        const s = line.trim();
+        if (!s) continue;
+        try {
+          const msg = JSON.parse(s);
+          if (typeof msg.progress === 'number' && !jsonMode) {
+            progressBar(msg.progress, msg.msg || '');
+          } else if (msg.error) {
+            errorLine = msg.error;
+          }
+        } catch { /* ignore non-JSON lines */ }
+      }
+    });
+
+    proc.on('close', (code) => {
+      if (!jsonMode) clearLine();
+      if (code !== 0) {
+        process.stderr.write(`Error: ${errorLine || 'evaluation process exited with code ' + code}\n`);
+        process.exit(1);
+      }
+      let result;
+      try { result = JSON.parse(resultLine.trim()); }
+      catch {
+        process.stderr.write('Error: could not parse evaluation output\n');
+        process.exit(1);
+      }
+      resolve(result);
+    });
+
+    proc.on('error', (err) => {
+      process.stderr.write(`Error: failed to start Python: ${err.message}\n`);
+      process.exit(1);
+    });
+  });
+}
+
 // ── Argument parsing helpers ──────────────────────────────────────────────────
 
 function parseArgs(argv) {
@@ -197,7 +322,6 @@ async function cmdGenerate(pos, flags) {
     process.stderr.write(`Generating synthetic data from ${path.basename(input)} …\n`);
   }
 
-  // Build args for sphere-node.js
   const nodeArgs = [SPHERE_NODE_JS, input, output];
   if (flags.k)           nodeArgs.push('--k',        String(flags.k));
   if (flags.theta)       nodeArgs.push('--theta',     String(flags.theta));
@@ -245,7 +369,7 @@ async function cmdGenerate(pos, flags) {
 
       if (flags.json) {
         process.stdout.write(JSON.stringify(result) + '\n');
-        resolve();
+        resolve(result);
         return;
       }
 
@@ -257,7 +381,7 @@ async function cmdGenerate(pos, flags) {
       if (result.idColDetected) {
         process.stdout.write(`  ID columns excluded: ${result.idColName}\n`);
       }
-      resolve();
+      resolve(result);
     });
 
     proc.on('error', (err) => {
@@ -265,6 +389,90 @@ async function cmdGenerate(pos, flags) {
       process.exit(1);
     });
   });
+}
+
+// ── sphere evaluate ───────────────────────────────────────────────────────────
+
+async function cmdEvaluate(pos, flags) {
+  await checkLicense();
+
+  const real  = pos[0];
+  const synth = pos[1];
+
+  if (!real)  { process.stderr.write('Error: missing real CSV\n');  process.exit(1); }
+  if (!synth) { process.stderr.write('Error: missing synth CSV\n'); process.exit(1); }
+  if (!fs.existsSync(real))  { process.stderr.write(`Error: file not found: ${real}\n`);  process.exit(1); }
+  if (!fs.existsSync(synth)) { process.stderr.write(`Error: file not found: ${synth}\n`); process.exit(1); }
+
+  if (!flags.json) {
+    process.stderr.write(`Evaluating ${path.basename(real)} vs ${path.basename(synth)} …\n`);
+  }
+
+  const scriptArgs = [real, synth];
+  if (flags['skip-privacy'])  scriptArgs.push('--skip-privacy');
+  if (flags['n-attacks'])     scriptArgs.push('--n-attacks',   String(flags['n-attacks']));
+  if (flags['n-secrets'])     scriptArgs.push('--n-secrets',   String(flags['n-secrets']));
+  if (flags['n-atk-cap'])     scriptArgs.push('--n-atk-cap',   String(flags['n-atk-cap']));
+  if (flags['n-neighbors'])   scriptArgs.push('--n-neighbors', String(flags['n-neighbors']));
+  if (flags['n-aux-cols'])    scriptArgs.push('--n-aux-cols',  String(flags['n-aux-cols']));
+  if (flags.seed)             scriptArgs.push('--seed',        String(flags.seed));
+
+  const result = await runPythonScript(EVALUATE_PY, scriptArgs, { json: !!flags.json });
+
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(result) + '\n');
+    return result;
+  }
+
+  const evalS = ((result.runMs || 0) / 1000).toFixed(1);
+  process.stdout.write(`✓ Evaluation complete  (${evalS} s)\n`);
+  printEvalResults(result);
+  return result;
+}
+
+// ── sphere certify ────────────────────────────────────────────────────────────
+
+async function cmdCertify(pos, flags) {
+  await checkLicense();
+
+  const real   = pos[0];
+  const synth  = pos[1];
+  const output = flags.output;
+
+  if (!real)   { process.stderr.write('Error: missing real CSV\n');  process.exit(1); }
+  if (!synth)  { process.stderr.write('Error: missing synth CSV\n'); process.exit(1); }
+  if (!output) { process.stderr.write('Error: missing -o / --output path\n'); process.exit(1); }
+  if (!fs.existsSync(real))  { process.stderr.write(`Error: file not found: ${real}\n`);  process.exit(1); }
+  if (!fs.existsSync(synth)) { process.stderr.write(`Error: file not found: ${synth}\n`); process.exit(1); }
+
+  if (!flags.json) {
+    process.stderr.write(`Certifying ${path.basename(real)} vs ${path.basename(synth)} …\n`);
+  }
+
+  const scriptArgs = [real, synth, '-o', output];
+  if (flags['skip-privacy'])  scriptArgs.push('--skip-privacy');
+  if (flags['n-attacks'])     scriptArgs.push('--n-attacks',   String(flags['n-attacks']));
+  if (flags['n-secrets'])     scriptArgs.push('--n-secrets',   String(flags['n-secrets']));
+  if (flags['n-atk-cap'])     scriptArgs.push('--n-atk-cap',   String(flags['n-atk-cap']));
+  if (flags['n-neighbors'])   scriptArgs.push('--n-neighbors', String(flags['n-neighbors']));
+  if (flags['n-aux-cols'])    scriptArgs.push('--n-aux-cols',  String(flags['n-aux-cols']));
+  if (flags.seed)             scriptArgs.push('--seed',        String(flags.seed));
+  if (flags.k)                scriptArgs.push('--k',           String(flags.k));
+  if (flags.theta)            scriptArgs.push('--theta',       String(flags.theta));
+  if (flags.delta)            scriptArgs.push('--delta',       String(flags.delta));
+  if (flags['mix-prob'])      scriptArgs.push('--mix-prob',    String(flags['mix-prob']));
+  if (flags['seed-gen'])      scriptArgs.push('--seed-gen',    String(flags['seed-gen']));
+  if (flags['generated-at'])  scriptArgs.push('--generated-at', flags['generated-at']);
+
+  const result = await runPythonScript(CERTIFY_PY, scriptArgs, { json: !!flags.json });
+
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(result) + '\n');
+    return;
+  }
+
+  const elapsedS = ((result.elapsedMs || 0) / 1000).toFixed(1);
+  process.stdout.write(`✓ ${output}  (${elapsedS} s)\n`);
 }
 
 // ── sphere demo ───────────────────────────────────────────────────────────────
@@ -280,17 +488,35 @@ async function cmdDemo() {
   const tmpOut = path.join(os.tmpdir(), `sphere-demo-${randomUUID()}.csv`);
 
   process.stdout.write('SPHERE demo — built-in NHANES dataset (4,899 rows \xd7 18 cols)\n');
-  process.stdout.write('─'.repeat(52) + '\n\n');
+  process.stdout.write('─'.repeat(52) + '\n');
 
   try {
+    // ── Generate ──────────────────────────────────────────────────────────────
+    process.stdout.write('\n');
     await cmdGenerate([exampleCsv], { output: tmpOut });
+
+    // ── Evaluate ──────────────────────────────────────────────────────────────
+    process.stdout.write('\n');
+    process.stderr.write(`Evaluating ${path.basename(exampleCsv)} vs synthetic …\n`);
+
+    const scriptArgs = [exampleCsv, tmpOut, '--n-attacks', '200', '--n-atk-cap', '1000'];
+    const result = await runPythonScript(EVALUATE_PY, scriptArgs);
+
+    const evalS = ((result.runMs || 0) / 1000).toFixed(1);
+    process.stdout.write(`✓ Evaluation complete  (${evalS} s)\n`);
+    printEvalResults(result);
+
+  } catch (err) {
+    process.stderr.write(`\nError during demo: ${err.message}\n`);
   } finally {
     try { fs.unlinkSync(tmpOut); } catch {}
     try { fs.unlinkSync(tmpOut + '.sphere.json'); } catch {}
   }
 
-  process.stdout.write('\nTry it on your own data:\n');
-  process.stdout.write('  sphere generate your_data.csv -o synthetic.csv\n\n');
+  process.stdout.write('Try it on your own data:\n');
+  process.stdout.write('  sphere generate your_data.csv -o synthetic.csv\n');
+  process.stdout.write('  sphere evaluate your_data.csv synthetic.csv\n');
+  process.stdout.write('  sphere certify  your_data.csv synthetic.csv -o report.html\n\n');
 }
 
 // ── sphere license ────────────────────────────────────────────────────────────
@@ -299,7 +525,6 @@ async function cmdLicense(sub, pos, flags) {
   if (sub === 'activate') {
     let key = (pos[0] || flags.key || '').trim();
     if (!key) {
-      // Simple stdin prompt (no readline dependency)
       process.stdout.write('SPHERE license key (sphere_…): ');
       key = await new Promise((resolve) => {
         let buf = '';
@@ -395,9 +620,11 @@ async function main() {
 
   if (!cmd || flags.help || flags.h) {
     process.stdout.write(
-      `SPHERE CLI v${VERSION} — synthetic data generation\n\n` +
+      `SPHERE CLI v${VERSION} — synthetic data generation, evaluation & certification\n\n` +
       'Usage:\n' +
-      '  sphere generate <input.csv> -o <output.csv> [options]\n' +
+      '  sphere generate <input.csv> -o <output.csv>   [options]\n' +
+      '  sphere evaluate <real.csv>  <synth.csv>        [options]\n' +
+      '  sphere certify  <real.csv>  <synth.csv> -o <cert.html>  [options]\n' +
       '  sphere license  activate|status|clear\n' +
       '  sphere demo\n\n' +
       'Generate options:\n' +
@@ -406,6 +633,12 @@ async function main() {
       '  --delta <float>    Per-pair angle jitter (default: 5° ≈ 0.087)\n' +
       '  --mix-prob <float> Privacy/utility trade-off (default: 0.75)\n' +
       '  --seed <int>       Integer seed for reproducible output\n' +
+      '  --json             Machine-readable JSON output\n\n' +
+      'Evaluate / Certify options:\n' +
+      '  --skip-privacy     Fidelity only — skip privacy attacks (faster)\n' +
+      '  --n-attacks <int>  Attack draws per metric (default: 500)\n' +
+      '  --n-atk-cap <int>  Row subsample cap for attacks (default: 2000)\n' +
+      '  --seed <int>       RNG seed for reproducible scores\n' +
       '  --json             Machine-readable JSON output\n',
     );
     process.exit(0);
@@ -413,6 +646,16 @@ async function main() {
 
   if (cmd === 'generate') {
     await cmdGenerate(pos.slice(1), flags);
+    return;
+  }
+
+  if (cmd === 'evaluate') {
+    await cmdEvaluate(pos.slice(1), flags);
+    return;
+  }
+
+  if (cmd === 'certify') {
+    await cmdCertify(pos.slice(1), flags);
     return;
   }
 
@@ -424,14 +667,6 @@ async function main() {
   if (cmd === 'license') {
     await cmdLicense(pos[1], pos.slice(2), flags);
     return;
-  }
-
-  if (cmd === 'evaluate' || cmd === 'certify') {
-    process.stderr.write(
-      `'sphere ${cmd}' requires the Python evaluation engine, which is not included\n` +
-      'in this version. Coming soon.\n',
-    );
-    process.exit(1);
   }
 
   process.stderr.write(`Unknown command: ${cmd}\nRun 'sphere --help' for usage.\n`);
