@@ -1,0 +1,5 @@
+# Exclude Python bytecode cache from npm tarball
+sphere_cli/__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
