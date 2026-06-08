@@ -1,93 +1,106 @@
 'use strict';
 
 /**
- * SPHERE CLI postinstall — compiles sphere-node.js to V8 bytecode.
+ * SPHERE CLI postinstall — download the platform-specific sealed binary.
  *
- * sphere-node.js in this package is an obfuscated JS bundle of the SPHERE
- * algorithm.  Compiling it to V8 bytecode (.jsc) at install time ensures the
- * bytecode matches the Node.js version on this machine, preventing
- * decompilation.  After compilation the source file is replaced by a tiny
- * loader stub so only bytecode remains on disk.
+ * The SPHERE engine ships as a signed + notarized native binary (one per
+ * platform) hosted on GitHub Releases. This script detects the platform,
+ * downloads the matching tarball, verifies its SHA-256 against the published
+ * SHA256SUMS.txt, and extracts it into ./vendor/. No algorithm source ships in
+ * the npm package — only this downloader + a thin launcher.
  *
- * This mirrors exactly how the SPHERE desktop app protects its code.
+ * Env:
+ *   SPHERE_SKIP_POSTINSTALL=1   skip download (CI / offline)
+ *   SPHERE_BINARY_BASEURL=...   override the release base URL (testing)
  */
 
+const fs = require('fs');
 const path = require('path');
-const fs   = require('fs');
+const crypto = require('crypto');
+const { execFileSync } = require('child_process');
 
-const PKG_DIR   = path.join(__dirname, '..');
-const SRC       = path.join(PKG_DIR, 'sphere-node.js');
-const OUT       = path.join(PKG_DIR, 'sphere-node.jsc');
-const STUB      = "'use strict';\nrequire('bytenode');\nrequire('./sphere-node.jsc');\n";
-const VERSION   = require('../package.json').version;
-const MARKER    = path.join(PKG_DIR, '.sphere-node-version');
+const PKG = require('../package.json');
+const VERSION = PKG.version;
+const REPO = 'statzihuai/sphere-cli';
 
-// ── Skip flag ─────────────────────────────────────────────────────────────────
+const PLATFORM = process.platform; // 'darwin' | 'linux'
+const ARCH = process.arch;         // 'arm64' | 'x64'
+const KEY = `${PLATFORM}-${ARCH}`;
+const SUPPORTED = new Set(['darwin-arm64', 'darwin-x64', 'linux-x64']);
+
+const PKG_ROOT = path.join(__dirname, '..');
+const VENDOR = path.join(PKG_ROOT, 'vendor');
+const ASSET = `sphere-${KEY}.tar.gz`;
+const BASE = process.env.SPHERE_BINARY_BASEURL
+  || `https://github.com/${REPO}/releases/download/v${VERSION}`;
+
+function log(m) { process.stdout.write(`sphere-cli: ${m}\n`); }
+function fail(m) { process.stderr.write(`sphere-cli: ${m}\n`); process.exit(1); }
+
 if (process.env.SPHERE_SKIP_POSTINSTALL === '1') {
-  process.stdout.write('SPHERE_SKIP_POSTINSTALL=1 — skipping bytecode compilation.\n');
+  log('SPHERE_SKIP_POSTINSTALL=1 — skipping binary download.');
   process.exit(0);
 }
 
-// ── Already compiled for this version? ───────────────────────────────────────
-const installedVer = fs.existsSync(MARKER)
-  ? fs.readFileSync(MARKER, 'utf8').trim()
-  : null;
-
-if (fs.existsSync(OUT) && installedVer === VERSION) {
-  process.stdout.write(`✓ SPHERE algorithm already compiled for v${VERSION}.\n`);
-  process.exit(0);
-}
-
-// ── Source check ──────────────────────────────────────────────────────────────
-if (!fs.existsSync(SRC)) {
-  process.stderr.write('sphere-node.js not found in package — reinstall sphere-cli.\n');
-  process.exit(1);
-}
-
-const srcText = fs.readFileSync(SRC, 'utf8');
-if (srcText.includes("require('bytenode')") && srcText.length < 200) {
-  // Already stubbed from a previous install — .jsc must exist
-  if (fs.existsSync(OUT)) {
-    process.stdout.write('✓ SPHERE algorithm already compiled.\n');
-    process.exit(0);
-  }
-  process.stderr.write('sphere-node.js is a stub but sphere-node.jsc is missing. Reinstall sphere-cli.\n');
-  process.exit(1);
-}
-
-// ── Compile ───────────────────────────────────────────────────────────────────
-process.stdout.write('Compiling SPHERE algorithm for your Node.js version …\n');
-
-let bytenode;
-try {
-  bytenode = require('bytenode');
-} catch {
+if (!SUPPORTED.has(KEY)) {
+  // Don't hard-fail the install; the launcher prints guidance if run.
   process.stderr.write(
-    'bytenode is not installed — this is unexpected.\n' +
-    'Try: cd "$(npm root -g)/sphere-cli" && npm install bytenode\n',
+    `sphere-cli: no prebuilt binary for ${KEY} yet ` +
+    `(supported: ${[...SUPPORTED].join(', ')}).\n`,
   );
-  process.exit(1);
+  process.exit(0);
 }
 
-Promise.resolve(bytenode.compileFile({ filename: SRC, output: OUT }))
-  .then(() => {
-    // Replace source with loader stub so no readable code remains on disk
-    fs.writeFileSync(SRC, STUB, 'utf8');
-    // Write version marker
-    fs.writeFileSync(MARKER, VERSION, 'utf8');
+// Already installed for this version?
+const STAMP = path.join(VENDOR, '.version');
+const BIN = path.join(VENDOR, 'sphere-cli', 'sphere');
+if (fs.existsSync(BIN) && fs.existsSync(STAMP) &&
+    fs.readFileSync(STAMP, 'utf8').trim() === VERSION) {
+  log(`binary already present for v${VERSION}.`);
+  process.exit(0);
+}
 
-    const sizeKB = (fs.statSync(OUT).size / 1024).toFixed(1);
-    process.stdout.write(`✓ SPHERE algorithm compiled (${sizeKB} KB).\n\n`);
-    process.stdout.write('  Quick start:\n');
-    process.stdout.write('    sphere generate data.csv -o synthetic.csv\n');
-    process.stdout.write("    Run 'sphere --help' for all options.\n\n");
-  })
-  .catch((err) => {
-    process.stderr.write(`\n✗ SPHERE compilation failed: ${err.message}\n`);
-    process.stderr.write(
-      'The package was installed but the algorithm could not be compiled.\n' +
-      'Try reinstalling:  npm install -g sphere-cli\n\n',
-    );
-    // Exit 0 so npm install doesn't fail — will error on first use
-    process.exit(0);
-  });
+function curl(url, dest) {
+  execFileSync('curl', ['-fL', '--retry', '3', '--retry-delay', '2',
+    '--connect-timeout', '30', '-o', dest, url], { stdio: ['ignore', 'ignore', 'inherit'] });
+}
+
+function sha256(file) {
+  const h = crypto.createHash('sha256');
+  h.update(fs.readFileSync(file));
+  return h.digest('hex');
+}
+
+try {
+  fs.mkdirSync(VENDOR, { recursive: true });
+  const tarball = path.join(VENDOR, ASSET);
+
+  log(`downloading ${ASSET} (v${VERSION}) …`);
+  curl(`${BASE}/${ASSET}`, tarball);
+
+  // Verify checksum against the published SHA256SUMS.txt
+  const sumsFile = path.join(VENDOR, 'SHA256SUMS.txt');
+  curl(`${BASE}/SHA256SUMS.txt`, sumsFile);
+  const sums = fs.readFileSync(sumsFile, 'utf8');
+  const expected = sums.split('\n')
+    .map((l) => l.trim().split(/\s+/))
+    .find((p) => p[1] && p[1].endsWith(ASSET));
+  if (!expected) fail(`no checksum for ${ASSET} in SHA256SUMS.txt`);
+  const got = sha256(tarball);
+  if (got !== expected[0]) {
+    fail(`checksum mismatch for ${ASSET}\n  expected ${expected[0]}\n  got      ${got}`);
+  }
+  log('checksum verified ✓');
+
+  // Extract
+  fs.rmSync(path.join(VENDOR, 'sphere-cli'), { recursive: true, force: true });
+  execFileSync('tar', ['-xzf', tarball, '-C', VENDOR], { stdio: 'inherit' });
+  fs.chmodSync(BIN, 0o755);
+  fs.unlinkSync(tarball);
+  fs.writeFileSync(STAMP, VERSION);
+
+  log(`installed sealed binary for ${KEY} ✓`);
+} catch (e) {
+  fail(`failed to install binary: ${e.message}\n` +
+    `You can retry with: npm rebuild sphere-cli`);
+}
