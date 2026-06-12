@@ -1,6 +1,6 @@
 {
   "name": "sphere-cli",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "SPHERE CLI — synthetic data generation, evaluation, and certification (sealed native binary)",
   "keywords": [
     "synthetic-data",
