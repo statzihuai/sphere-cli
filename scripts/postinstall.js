@@ -22,6 +22,9 @@ const { execFileSync } = require('child_process');
 const PKG = require('../package.json');
 const VERSION = PKG.version;
 const REPO = 'statzihuai/sphere-cli';
+// Binary release tag — decoupled from the npm package version so JS-only patch
+// releases reuse the same prebuilt/notarized binaries without re-uploading them.
+const BINARY_RELEASE = 'v0.2.0';
 
 const PLATFORM = process.platform; // 'darwin' | 'linux'
 const ARCH = process.arch;         // 'arm64' | 'x64'
@@ -32,7 +35,7 @@ const PKG_ROOT = path.join(__dirname, '..');
 const VENDOR = path.join(PKG_ROOT, 'vendor');
 const ASSET = `sphere-${KEY}.tar.gz`;
 const BASE = process.env.SPHERE_BINARY_BASEURL
-  || `https://github.com/${REPO}/releases/download/v${VERSION}`;
+  || `https://github.com/${REPO}/releases/download/${BINARY_RELEASE}`;
 
 function log(m) { process.stdout.write(`sphere-cli: ${m}\n`); }
 function fail(m) { process.stderr.write(`sphere-cli: ${m}\n`); process.exit(1); }
@@ -55,8 +58,8 @@ if (!SUPPORTED.has(KEY)) {
 const STAMP = path.join(VENDOR, '.version');
 const BIN = path.join(VENDOR, 'sphere-cli', 'sphere');
 if (fs.existsSync(BIN) && fs.existsSync(STAMP) &&
-    fs.readFileSync(STAMP, 'utf8').trim() === VERSION) {
-  log(`binary already present for v${VERSION}.`);
+    fs.readFileSync(STAMP, 'utf8').trim() === BINARY_RELEASE) {
+  log(`binary already present (${BINARY_RELEASE}).`);
   process.exit(0);
 }
 
@@ -97,7 +100,31 @@ try {
   execFileSync('tar', ['-xzf', tarball, '-C', VENDOR], { stdio: 'inherit' });
   fs.chmodSync(BIN, 0o755);
   fs.unlinkSync(tarball);
-  fs.writeFileSync(STAMP, VERSION);
+  fs.rmSync(sumsFile, { force: true });
+  fs.writeFileSync(STAMP, BINARY_RELEASE);
+
+  // ── macOS: avoid a painfully slow FIRST run ────────────────────────────────
+  // A downloaded, unstapled notarized onedir pays a one-time Gatekeeper check of
+  // all ~330 bundled libraries on first launch (looks frozen on "loading pandas").
+  // (1) strip quarantine/provenance xattrs → skips the slow *online* assessment;
+  // (2) warm the binary now (during install, when waiting is expected) so the
+  //     user's first real command is instant. Both are best-effort.
+  if (PLATFORM === 'darwin') {
+    try { execFileSync('xattr', ['-cr', path.join(VENDOR, 'sphere-cli')], { stdio: 'ignore' }); } catch (_) {}
+    try {
+      log('warming binary (one-time macOS security scan, ~30–60s) …');
+      const warmIn = path.join(VENDOR, '.warm.csv');
+      const warmOut = path.join(VENDOR, '.warm_out.csv');
+      fs.writeFileSync(warmIn, 'a,b\n1.0,2.0\n3.0,4.0\n5.0,6.0\n');
+      execFileSync(BIN, ['generate', warmIn, '-o', warmOut], {
+        stdio: 'ignore',
+        timeout: 180000,
+        env: { ...process.env, SPHERE_LICENSE_REQUIRED: 'false' },
+      });
+      for (const f of [warmIn, warmOut, warmOut + '.sphere.json']) fs.rmSync(f, { force: true });
+      log('binary warmed ✓ — first run will be fast.');
+    } catch (_) { /* best-effort; user just pays the scan on first run */ }
+  }
 
   log(`installed sealed binary for ${KEY} ✓`);
 } catch (e) {
