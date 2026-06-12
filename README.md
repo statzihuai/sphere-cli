@@ -162,7 +162,7 @@ Options:
   -n, --rows INT           Number of synthetic rows (default: same as input)
   -k INT                   Synthesis depth (default: 2)
   --seed INT               Random seed for reproducibility
-  --mix-prob FLOAT         Mixture probability 0–1 (default: 0.75)
+  --mix-prob FLOAT         Privacy/utility trade-off, 0–1 (default: 0.75)
   --json                   Machine-readable JSON output
 ```
 
@@ -195,7 +195,7 @@ Options:
   --json                   Machine-readable JSON output
 ```
 
-Produces a self-contained HTML certificate with fidelity and privacy scores, dataset metadata, and generation provenance. Generation parameters (`k`, `seed`, `theta`, etc.) are loaded automatically from the `.sphere.json` sidecar; pass flags explicitly to override.
+Produces a self-contained HTML certificate with fidelity and privacy scores, dataset metadata, and generation provenance. Generation parameters are loaded automatically from the `.sphere.json` sidecar; pass flags explicitly to override.
 
 ---
 
