@@ -24,7 +24,7 @@ const VERSION = PKG.version;
 const REPO = 'statzihuai/sphere-cli';
 // Binary release tag — decoupled from the npm package version so JS-only patch
 // releases reuse the same prebuilt/notarized binaries without re-uploading them.
-const BINARY_RELEASE = 'v0.2.0';
+const BINARY_RELEASE = 'v0.2.2';
 
 const PLATFORM = process.platform; // 'darwin' | 'linux'
 const ARCH = process.arch;         // 'arm64' | 'x64'
