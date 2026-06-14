@@ -8,51 +8,40 @@ Command-line interface for **SPHERE** — synthetic data generation, evaluation,
 
 ## Install
 
-**npm (recommended):**
-
 ```sh
 npm install -g sphere-cli
 ```
 
-No Python, no curl, no PATH editing. Requires Node.js ≥ 16.
+Requires **Node.js ≥ 18**. No Python and no manual PATH editing — the install downloads a self-contained, signed binary and wires everything up for you.
 
-**curl (no Node.js required):**
+**Install once, run anywhere (HPC).** The ~500 MB engine is **not** placed inside `node_modules`, so it never blows up a quota-limited home directory. On a cluster the installer auto-detects roomy shared storage (`$OAK`, `$SCRATCH`, `$WORK`, `$PROJECT`, `$GROUP_HOME`, …) and installs there; because that storage and your `~/.bashrc` are shared across every login and compute node, you install once and `sphere` works in every future session on every node — no reinstall. If the global `bin` isn't already on your `PATH`, the installer appends it to your shell rc automatically. To pin a location, set `SPHERE_HOME=/path/with/space` before installing.
 
-```sh
-curl -fsSL https://github.com/statzihuai/sphere-cli/releases/latest/download/install.sh | sh
-```
-
-For HPC / cloud with no sudo:
+**Update / uninstall:**
 
 ```sh
-curl -fsSL https://github.com/statzihuai/sphere-cli/releases/latest/download/install.sh | sh -s -- --prefix ~/.local
-# then add to ~/.bashrc or ~/.zshrc:
-export PATH="$HOME/.local/bin:$PATH"
+npm install -g sphere-cli      # update to the latest version
+npm uninstall -g sphere-cli    # remove
 ```
 
-**Uninstall:**
-
-```sh
-sh install.sh --uninstall
-```
+**No Node.js?** Download the tarball for your platform from the [latest release](https://github.com/statzihuai/sphere-cli/releases/latest), extract it, and run `sphere-cli/sphere` directly (add it to your `PATH` if you like).
 
 ### Supported platforms
 
 | Platform | Architecture |
 |---|---|
 | macOS | Apple Silicon (arm64) |
-| Linux | x86\_64 |
-| Linux | arm64 (AWS Graviton, etc.) |
+| macOS | Intel (x86\_64) |
+| Linux | x86\_64 (glibc ≥ 2.17 — runs on CentOS 7 / RHEL 7 and newer, incl. most HPC clusters) |
 
 ---
 
 ## Quick start
 
 ```sh
-# Try the built-in demo (no data needed)
+# Try the built-in demo (no data or license needed)
 sphere demo
 
-# Activate your license (once)
+# Activate your license (once; required for generate/evaluate/certify)
 sphere license activate sphere_xxxxxxxxxxxxxxxxxxxx
 
 # Generate synthetic data
@@ -69,7 +58,7 @@ sphere certify real.csv synth.csv -o report.html
 
 ## First run
 
-On the very first invocation the CLI cold-loads its bundled Python libraries (pandas, pyarrow, anonymeter, sklearn) from disk. On Apple Silicon this typically takes **15–25 seconds** and is shown in the progress bar as each library finishes:
+On the very first invocation the CLI cold-loads its bundled Python libraries (pandas, pyarrow, anonymeter, sklearn) from disk. On Apple Silicon this typically takes **15–25 seconds**, shown in the progress bar as each library finishes:
 
 ```
 Generating synthetic data from nhanes_sample.csv …
@@ -81,9 +70,9 @@ Generating synthetic data from nhanes_sample.csv …
 ✓ synth.csv  4,899 rows × 18 cols  (load 17.4 s + run 1.8 s)  seed 3721018536
 ```
 
-Subsequent calls in the same session skip loading entirely. The timing line always shows **load** (library startup) and **run** (actual SPHERE computation) separately so you can see which part is slow.
+Subsequent calls on the same node skip loading (OS page cache). The timing line always shows **load** (library startup) and **run** (actual SPHERE computation) separately so you can see which part is slow.
 
-> Exact times vary by machine, OS page cache state, and whether the binary has been run recently.
+> On a cluster, the engine lives on shared network storage; the first run on a fresh node re-pays that cold load. If you launch many `sphere` commands in one job and want each to start fast, the launcher transparently caches the engine to node-local disk (`$L_SCRATCH`/`$TMPDIR`) on network filesystems — set `SPHERE_NO_FAST=1` to disable.
 
 ---
 
@@ -97,48 +86,9 @@ Run SPHERE end-to-end on the built-in NHANES sample dataset (4,899 rows × 18 co
 sphere demo
 ```
 
-```
-SPHERE demo — built-in NHANES dataset (4,899 rows × 18 cols, continuous + categorical)
-────────────────────────────────────────────────────
-
-Generating synthetic data from nhanes_sample.csv …
-  [░░░░░░░░░░░░░░░░░]   0.0%  loading pandas . .
-  [█░░░░░░░░░░░░░░░░]   3.0%  ✓ pandas  (12.4 s)
-  [██░░░░░░░░░░░░░░░]   6.0%  ✓ pyarrow  (3.1 s)
-  [███░░░░░░░░░░░░░░]   9.0%  ✓ sphere core  (1.8 s)
-  [████████████████░]  85.0%  writing output
-✓ /tmp/synth.csv  4,899 rows × 18 cols  (load 17.4 s + run 1.8 s)  seed 3721018536
-
-Evaluating nhanes_sample.csv vs synth.csv …
-  [████░░░░░░░░░░░░░]  16.0%  loading anonymeter . .
-  [████░░░░░░░░░░░░░]  17.0%  ✓ anonymeter  (3.2 s)
-  [█████░░░░░░░░░░░░]  18.0%  ✓ sklearn  (0.8 s)
-  [█████████████████]  89.0%  inference  9/9
-✓ Evaluation complete  (load 4.0 s + run 14.2 s)
-
-  Fidelity
-  ────────────────────────────────────
-  Mean           100.0  ████████████████████
-  Variance        99.7  ████████████████████
-  Correlation     95.1  ███████████████████░
-  KS              96.8  ███████████████████░
-  ────────────────────────────────────
-  Composite       97.9  ████████████████████
-
-  Privacy
-  ────────────────────────────────────
-  Singling Out   100.0  ████████████████████
-  Linkability     97.5  ███████████████████░
-  Inference       96.8  ███████████████████░
-  ────────────────────────────────────
-  Composite       98.1  ████████████████████
-```
-
----
-
 ### `sphere license`
 
-Activate and manage your SPHERE license. A valid license is required to use `generate`, `evaluate`, and `certify`.
+Activate and manage your SPHERE license. A valid license is required to use `generate`, `evaluate`, and `certify` (but **not** `demo`).
 
 ```
 sphere license activate [KEY]   # Activate with a sphere_… key (prompts if omitted)
@@ -150,8 +100,6 @@ The key is stored at `~/.config/sphere/license_key` (mode 0600). After a success
 
 > Don't have a license? Contact [zihuai@stanford.edu](mailto:zihuai@stanford.edu) or visit [sphere.stanford.edu](https://sphere.stanford.edu).
 
----
-
 ### `sphere generate`
 
 ```
@@ -159,16 +107,13 @@ sphere generate <real.csv> [options]
 
 Options:
   -o, --output PATH        Output CSV path (default: <input>_sphere.csv)
-  -n, --rows INT           Number of synthetic rows (default: same as input)
-  -k INT                   Synthesis depth (default: 2)
-  --seed INT               Random seed for reproducibility
+  --k INT                  Synthesis passes (default: 2; more = stronger privacy)
   --mix-prob FLOAT         Privacy/utility trade-off, 0–1 (default: 0.75)
+  --seed INT               Random seed for reproducibility
   --json                   Machine-readable JSON output
 ```
 
-A `.sphere.json` provenance file is written alongside every output CSV and is automatically read by `sphere certify`.
-
----
+The synthetic output has the **same number of rows** as the input (SPHERE transforms the data in place). Integer-coded categorical columns (≤ 10 distinct values, e.g. 0/1 flags or small ordinal scales) are preserved as exact discrete values; continuous columns are transformed while preserving the covariance structure. A `.sphere.json` provenance file is written alongside every output CSV and is read automatically by `sphere certify`.
 
 ### `sphere evaluate`
 
@@ -177,13 +122,16 @@ sphere evaluate <real.csv> <synth.csv> [options]
 
 Options:
   --skip-privacy           Skip privacy metrics (faster)
-  --seed INT               Fix the random seed for reproducible attack results
+  --n-attacks INT          Anonymeter attacks per metric (default: 500)
+  --n-secrets INT          Random secret columns per inference replicate (default: 5)
+  --n-reps INT             Inference replicates to average (default: 10; more = tighter, slower)
+  --n-neighbors INT        k for the linkability k-NN test (default: 1)
+  --n-aux-cols INT         Feature columns for the linkability A/B split (default: 20)
+  --seed INT               Fix the random seed for fully reproducible results
   --json                   Machine-readable JSON output
 ```
 
-Reports four fidelity metrics (mean, variance, correlation, KS) and three privacy metrics (singling-out, linkability, inference), each scored 0–100. Scores are normalised against a column-shuffled baseline so 100 = no measurable privacy leakage relative to a random permutation of the data.
-
----
+Reports four fidelity metrics (mean, variance, correlation, KS) and three privacy metrics (singling-out, linkability, inference), each scored 0–100. Scores are normalised against a column-shuffled baseline, so 100 = no measurable leakage relative to a random permutation. The **inference** score averages `--n-reps` independent replicates of the random secret-column sampling, which makes it stable run-to-run (raise `--n-reps` for an even tighter estimate, or pass `--seed` for an exactly reproducible audit).
 
 ### `sphere certify`
 
@@ -216,11 +164,12 @@ sphere evaluate real.csv synth.csv --json | jq '.privacy.composite'
 | Variable | Description |
 |---|---|
 | `SPHERE_LICENSE_REQUIRED` | Set to `false` to bypass license checks (research / unlocked builds) |
-| `SPHERE_WORKER_URL` | Override the license validation endpoint |
-| `SPHERE_PREFIX` | Override install prefix |
-| `SPHERE_VERSION` | Pin a release tag, e.g. `v0.1.38` |
-| `SPHERE_BUNDLE_URL` | Full URL to a `sphere-cli-*.tar.gz` (skip auto-detect) |
-| `SPHERE_GITHUB_REPO` | Override GitHub repo for downloads |
+| `SPHERE_HOME` | Install location for the engine (default: auto-detected roomy/HPC storage, else `~/.local/share`) |
+| `SPHERE_NO_FAST` | Set to `1` to disable node-local caching of the engine on network filesystems |
+| `SPHERE_FAST_DIR` | Override the node-local cache directory (default: `$L_SCRATCH`/`$TMPDIR`) |
+| `SPHERE_NO_PATH_SETUP` | Set to `1` to skip auto-adding the `bin` dir to your shell rc |
+| `SPHERE_BINARY_BASEURL` | Override the release base URL the engine downloads from (testing) |
+| `SPHERE_SKIP_POSTINSTALL` | Set to `1` to skip the binary download during `npm install` (CI / offline) |
 
 ---
 

@@ -21,3 +21,6 @@ package-lock.json
 sphere-node.js
 sphere-node.jsc
 .sphere-node-version
+
+# npm pack artifacts
+*.tgz
