@@ -5,30 +5,36 @@
  * sphere — thin launcher.
  *
  * The actual CLI is a sealed, signed+notarized native binary (PyInstaller bundle
- * of the SPHERE engine — same engine as the desktop app). The npm `postinstall`
- * downloads the platform-specific binary into ./vendor/. This launcher just
- * forwards argv to it. No readable algorithm code ships in the npm package.
+ * of the SPHERE engine). It is auto-placed in a roomy directory by the install
+ * step (see scripts/engine.js). This launcher locates it, re-downloads it if it
+ * has gone missing (e.g. scratch purge), optionally caches it on node-local disk
+ * for fast startup on network filesystems, and forwards argv. No algorithm code
+ * ships in the npm package.
  */
 
-const path = require('path');
-const fs = require('fs');
 const { spawnSync } = require('child_process');
+const engine = require('../scripts/engine.js');
 
-const BIN = path.join(__dirname, '..', 'vendor', 'sphere-cli', 'sphere');
+const tell = (m) => process.stderr.write(`sphere: ${m}\n`);
 
-if (!fs.existsSync(BIN)) {
-  process.stderr.write(
-    '\nSPHERE binary not found.\n' +
-    'The platform binary is downloaded by the install step. Try reinstalling:\n' +
-    '  npm install -g sphere-cli\n' +
-    'If your platform is unsupported, see https://github.com/statzihuai/sphere-cli\n',
-  );
+let bin;
+try {
+  bin = engine.resolveBinary();
+  if (!bin) {
+    tell('engine not found — installing it now (one-time) …');
+    bin = engine.ensureInstalled((m) => process.stderr.write(`  ${m}\n`));
+  }
+} catch (e) {
+  tell(`could not locate or install the engine: ${e.message}`);
+  tell('try:  npm install -g sphere-cli   (or set SPHERE_HOME=/path/with/space)');
   process.exit(1);
 }
 
-const res = spawnSync(BIN, process.argv.slice(2), { stdio: 'inherit' });
+const run = engine.fastBinary(bin, tell);
+
+const res = spawnSync(run, process.argv.slice(2), { stdio: 'inherit' });
 if (res.error) {
-  process.stderr.write(`Failed to launch sphere: ${res.error.message}\n`);
+  tell(`failed to launch: ${res.error.message}`);
   process.exit(1);
 }
 process.exit(res.status === null ? 1 : res.status);

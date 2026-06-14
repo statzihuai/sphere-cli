@@ -1,133 +1,114 @@
 'use strict';
 
 /**
- * SPHERE CLI postinstall — download the platform-specific sealed binary.
+ * SPHERE CLI postinstall.
  *
- * The SPHERE engine ships as a signed + notarized native binary (one per
- * platform) hosted on GitHub Releases. This script detects the platform,
- * downloads the matching tarball, verifies its SHA-256 against the published
- * SHA256SUMS.txt, and extracts it into ./vendor/. No algorithm source ships in
- * the npm package — only this downloader + a thin launcher.
+ * Places the platform-specific sealed binary in a roomy, auto-detected location
+ * (NOT inside node_modules — that would force users to repoint `npm config set
+ * prefix` to dodge home-dir quotas). All the location/download/verify logic lives
+ * in ./engine.js, shared with the launcher. This script just drives it, warms the
+ * binary once, and wires up PATH so `sphere` is callable without manual setup.
  *
- * Env:
- *   SPHERE_SKIP_POSTINSTALL=1   skip download (CI / offline)
- *   SPHERE_BINARY_BASEURL=...   override the release base URL (testing)
+ * Env: SPHERE_SKIP_POSTINSTALL=1, SPHERE_HOME=<dir>, SPHERE_NO_PATH_SETUP=1.
  */
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
-const crypto = require('crypto');
 const { execFileSync } = require('child_process');
-
-const PKG = require('../package.json');
-const VERSION = PKG.version;
-const REPO = 'statzihuai/sphere-cli';
-// Binary release tag — decoupled from the npm package version so JS-only patch
-// releases reuse the same prebuilt/notarized binaries without re-uploading them.
-const BINARY_RELEASE = 'v0.2.3';
-
-const PLATFORM = process.platform; // 'darwin' | 'linux'
-const ARCH = process.arch;         // 'arm64' | 'x64'
-const KEY = `${PLATFORM}-${ARCH}`;
-const SUPPORTED = new Set(['darwin-arm64', 'darwin-x64', 'linux-x64']);
+const engine = require('./engine');
 
 const PKG_ROOT = path.join(__dirname, '..');
-const VENDOR = path.join(PKG_ROOT, 'vendor');
-const ASSET = `sphere-${KEY}.tar.gz`;
-const BASE = process.env.SPHERE_BINARY_BASEURL
-  || `https://github.com/${REPO}/releases/download/${BINARY_RELEASE}`;
-
+const PLATFORM = engine.PLATFORM;
 function log(m) { process.stdout.write(`sphere-cli: ${m}\n`); }
-function fail(m) { process.stderr.write(`sphere-cli: ${m}\n`); process.exit(1); }
 
 if (process.env.SPHERE_SKIP_POSTINSTALL === '1') {
   log('SPHERE_SKIP_POSTINSTALL=1 — skipping binary download.');
   process.exit(0);
 }
-
-if (!SUPPORTED.has(KEY)) {
-  // Don't hard-fail the install; the launcher prints guidance if run.
+if (!engine.SUPPORTED.has(engine.KEY)) {
   process.stderr.write(
-    `sphere-cli: no prebuilt binary for ${KEY} yet ` +
-    `(supported: ${[...SUPPORTED].join(', ')}).\n`,
+    `sphere-cli: no prebuilt binary for ${engine.KEY} ` +
+    `(supported: ${[...engine.SUPPORTED].join(', ')}).\n`,
   );
   process.exit(0);
 }
 
-// Already installed for this version?
-const STAMP = path.join(VENDOR, '.version');
-const BIN = path.join(VENDOR, 'sphere-cli', 'sphere');
-if (fs.existsSync(BIN) && fs.existsSync(STAMP) &&
-    fs.readFileSync(STAMP, 'utf8').trim() === BINARY_RELEASE) {
-  log(`binary already present (${BINARY_RELEASE}).`);
-  process.exit(0);
-}
-
-function curl(url, dest) {
-  execFileSync('curl', ['-fL', '--retry', '3', '--retry-delay', '2',
-    '--connect-timeout', '30', '-o', dest, url], { stdio: ['ignore', 'ignore', 'inherit'] });
-}
-
-function sha256(file) {
-  const h = crypto.createHash('sha256');
-  h.update(fs.readFileSync(file));
-  return h.digest('hex');
-}
-
 try {
-  fs.mkdirSync(VENDOR, { recursive: true });
-  const tarball = path.join(VENDOR, ASSET);
+  const bin = engine.ensureInstalled(log);
+  log(`engine ready at ${bin}`);
 
-  log(`downloading ${ASSET} (v${VERSION}) …`);
-  curl(`${BASE}/${ASSET}`, tarball);
+  // Warm once (best-effort): the first run loads ~330 bundled libraries; doing it
+  // now (while an install wait is expected) means the user's first real command
+  // is fast. On macOS this also clears the one-time Gatekeeper scan.
+  try {
+    log('warming (first run loads the analysis stack; one-time) …');
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sphere-warm-'));
+    const warmIn = path.join(tmp, 'in.csv');
+    const warmOut = path.join(tmp, 'out.csv');
+    fs.writeFileSync(warmIn, 'a,b\n1.0,2.0\n3.0,4.0\n5.0,6.0\n');
+    execFileSync(bin, ['generate', warmIn, '-o', warmOut], {
+      stdio: 'ignore',
+      timeout: 240000,
+      env: { ...process.env, SPHERE_LICENSE_REQUIRED: 'false' },
+    });
+    fs.rmSync(tmp, { recursive: true, force: true });
+    log('warmed ✓ — first run will be fast.');
+  } catch (_) { /* best-effort */ }
 
-  // Verify checksum against the published SHA256SUMS.txt
-  const sumsFile = path.join(VENDOR, 'SHA256SUMS.txt');
-  curl(`${BASE}/SHA256SUMS.txt`, sumsFile);
-  const sums = fs.readFileSync(sumsFile, 'utf8');
-  const expected = sums.split('\n')
-    .map((l) => l.trim().split(/\s+/))
-    .find((p) => p[1] && p[1].endsWith(ASSET));
-  if (!expected) fail(`no checksum for ${ASSET} in SHA256SUMS.txt`);
-  const got = sha256(tarball);
-  if (got !== expected[0]) {
-    fail(`checksum mismatch for ${ASSET}\n  expected ${expected[0]}\n  got      ${got}`);
-  }
-  log('checksum verified ✓');
-
-  // Extract
-  fs.rmSync(path.join(VENDOR, 'sphere-cli'), { recursive: true, force: true });
-  execFileSync('tar', ['-xzf', tarball, '-C', VENDOR], { stdio: 'inherit' });
-  fs.chmodSync(BIN, 0o755);
-  fs.unlinkSync(tarball);
-  fs.rmSync(sumsFile, { force: true });
-  fs.writeFileSync(STAMP, BINARY_RELEASE);
-
-  // ── macOS: avoid a painfully slow FIRST run ────────────────────────────────
-  // A downloaded, unstapled notarized onedir pays a one-time Gatekeeper check of
-  // all ~330 bundled libraries on first launch (looks frozen on "loading pandas").
-  // (1) strip quarantine/provenance xattrs → skips the slow *online* assessment;
-  // (2) warm the binary now (during install, when waiting is expected) so the
-  //     user's first real command is instant. Both are best-effort.
-  if (PLATFORM === 'darwin') {
-    try { execFileSync('xattr', ['-cr', path.join(VENDOR, 'sphere-cli')], { stdio: 'ignore' }); } catch (_) {}
-    try {
-      log('warming binary (one-time macOS security scan, ~30–60s) …');
-      const warmIn = path.join(VENDOR, '.warm.csv');
-      const warmOut = path.join(VENDOR, '.warm_out.csv');
-      fs.writeFileSync(warmIn, 'a,b\n1.0,2.0\n3.0,4.0\n5.0,6.0\n');
-      execFileSync(BIN, ['generate', warmIn, '-o', warmOut], {
-        stdio: 'ignore',
-        timeout: 180000,
-        env: { ...process.env, SPHERE_LICENSE_REQUIRED: 'false' },
-      });
-      for (const f of [warmIn, warmOut, warmOut + '.sphere.json']) fs.rmSync(f, { force: true });
-      log('binary warmed ✓ — first run will be fast.');
-    } catch (_) { /* best-effort; user just pays the scan on first run */ }
-  }
-
-  log(`installed sealed binary for ${KEY} ✓`);
+  setupGlobalPath();
+  log(`installed sealed binary for ${engine.KEY} ✓`);
 } catch (e) {
-  fail(`failed to install binary: ${e.message}\n` +
-    `You can retry with: npm rebuild sphere-cli`);
+  process.stderr.write(
+    `sphere-cli: failed to install binary: ${e.message}\n` +
+    `Retry: npm rebuild sphere-cli   (or set SPHERE_HOME=/path/with/space and retry)\n`,
+  );
+  process.exit(1);
+}
+
+// ── Make `sphere` callable without manual PATH editing ──────────────────────
+// For a GLOBAL install whose prefix/bin is not already on PATH (common on HPC),
+// append the bin dir to the user's shell rc. Because the rc lives in the shared
+// home dir, the `sphere` command then works in every future session on every
+// node. Idempotent; skipped when already on PATH; opt out with SPHERE_NO_PATH_SETUP=1.
+function setupGlobalPath() {
+  try {
+    if (process.env.SPHERE_NO_PATH_SETUP === '1') return;
+    if (PLATFORM === 'win32') return;
+    const isGlobal = process.env.npm_config_global === 'true'
+      || /[\\/]lib[\\/]node_modules[\\/]sphere-cli$/.test(PKG_ROOT);
+    if (!isGlobal) return; // local installs run via `npx sphere` — no PATH needed
+
+    const prefix = process.env.npm_config_prefix
+      || path.resolve(PKG_ROOT, '..', '..', '..'); // <prefix>/lib/node_modules/sphere-cli
+    const binDir = path.join(prefix, 'bin');
+    const parts = (process.env.PATH || '').split(path.delimiter);
+    if (parts.includes(binDir)) return; // already callable — nothing to do
+
+    const home = os.homedir();
+    const block = `\n# added by sphere-cli — makes the \`sphere\` command available\n`
+      + `export PATH="${binDir}:$PATH"\n`;
+
+    const targets = [];
+    for (const f of ['.bashrc', '.zshrc']) {
+      const p = path.join(home, f);
+      if (fs.existsSync(p)) targets.push(p);
+    }
+    if (targets.length === 0) targets.push(path.join(home, '.bashrc')); // create one
+
+    const wrote = [];
+    for (const rc of targets) {
+      let cur = '';
+      try { cur = fs.readFileSync(rc, 'utf8'); } catch (_) {}
+      if (cur.includes(binDir)) continue; // idempotent
+      try { fs.appendFileSync(rc, block); wrote.push(path.basename(rc)); } catch (_) {}
+    }
+
+    if (wrote.length) {
+      log(`PATH: added ${binDir} to ${wrote.join(', ')} — \`sphere\` works in new shells (and every node, since home is shared).`);
+      log(`for THIS shell now:  export PATH="${binDir}:$PATH"`);
+    } else {
+      log(`to run \`sphere\`, add to your shell rc:  export PATH="${binDir}:$PATH"`);
+    }
+  } catch (_) { /* never fail the install over PATH setup */ }
 }

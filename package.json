@@ -1,6 +1,6 @@
 {
   "name": "sphere-cli",
-  "version": "0.2.3",
+  "version": "0.2.9",
   "description": "SPHERE CLI — synthetic data generation, evaluation, and certification (sealed native binary)",
   "keywords": [
     "synthetic-data",
@@ -19,12 +19,12 @@
     "sphere": "bin/sphere.js"
   },
   "scripts": {
-    "postinstall": "node scripts/postinstall.js",
-    "release": "bash scripts/release.sh"
+    "postinstall": "node scripts/postinstall.js"
   },
   "files": [
     "bin/sphere.js",
-    "scripts/postinstall.js"
+    "scripts/postinstall.js",
+    "scripts/engine.js"
   ],
   "engines": {
     "node": ">=18.0.0"
