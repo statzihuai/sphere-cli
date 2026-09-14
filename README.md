@@ -1,6 +1,16 @@
 # SPHERE CLI
 
-Command-line interface for **SPHERE** — synthetic data generation, evaluation, and certification. Designed for business workflows, data pipelines, and HPC environments.
+**Generate, evaluate and certify privacy-preserving synthetic twins of tabular data from the command line — built for research data pipelines, scripted analyses and HPC clusters.**
+
+[![DOI](https://img.shields.io/badge/DOI-10.64898%2F2026.09.01.748580-blue)](https://doi.org/10.64898/2026.09.01.748580)
+[![npm](https://img.shields.io/npm/v/sphere-cli)](https://www.npmjs.com/package/sphere-cli)
+[![License: non-commercial academic](https://img.shields.io/badge/license-non--commercial%20academic-lightgrey)](LICENSE)
+
+[Website](https://www.sphereworld.ai/?ref=github-sphere-cli) · [npm package](https://www.npmjs.com/package/sphere-cli) · [Latest release](https://github.com/statzihuai/sphere-cli/releases/latest) · [Preprint](https://doi.org/10.64898/2026.09.01.748580) · [Commands](#commands) · [Validation](https://www.sphereworld.ai/validation/?ref=github-sphere-cli) · [SPHERE World catalog](https://sphere-world.vercel.app)
+
+Command-line interface for **SPHERE** — synthetic data generation, evaluation, and certification. Designed for research data pipelines, scripted analyses, and HPC environments.
+
+Free for non-commercial academic research; commercial use requires a separate written license — see [License](#license).
 
 > For the desktop application (individual users), see [SPHERE App](https://github.com/statzihuai/SPHERE).
 
@@ -98,7 +108,7 @@ sphere license clear            # Remove stored key and cache
 
 The key is stored at `~/.config/sphere/license_key` (mode 0600). After a successful activation the license is cached locally for **7 days**, so the CLI works offline within that window.
 
-> Don't have a license? Contact [zihuai@stanford.edu](mailto:zihuai@stanford.edu) or visit [sphere.stanford.edu](https://sphere.stanford.edu).
+> Don't have a license? Contact [zihuai@stanford.edu](mailto:zihuai@stanford.edu). More about SPHERE at [www.sphereworld.ai](https://www.sphereworld.ai/?ref=github-sphere-cli).
 
 ### `sphere generate`
 
@@ -170,6 +180,31 @@ sphere evaluate real.csv synth.csv --json | jq '.privacy.composite'
 | `SPHERE_NO_PATH_SETUP` | Set to `1` to skip auto-adding the `bin` dir to your shell rc |
 | `SPHERE_BINARY_BASEURL` | Override the release base URL the engine downloads from (testing) |
 | `SPHERE_SKIP_POSTINSTALL` | Set to `1` to skip the binary download during `npm install` (CI / offline) |
+
+---
+
+## Citation
+
+If you use SPHERE in your research, please cite the preprint:
+
+> Zihuai He, Junyoung Park, Rafael Catoia Pulgrossi, Justin Lee, Robert R. Butler III, Audrey Weber, Lu Tian, Xiang Zhang, Julie Fangran Wang, Sharon Sha, Elizabeth C. Mormino, Tony Wyss-Coray, Victor W. Henderson, Frank M. Longo, James Zou, Manisha Desai, Russ Altman. **Unlocking Sensitive Data with SPHERE in the Age of AI.** *bioRxiv* (2026). [doi:10.64898/2026.09.01.748580](https://doi.org/10.64898/2026.09.01.748580)
+
+```bibtex
+@article{He2026SPHERE,
+  title   = {Unlocking Sensitive Data with {SPHERE} in the Age of {AI}},
+  author  = {He, Zihuai and Park, Junyoung and Pulgrossi, Rafael Catoia and Lee, Justin and
+             Butler, III, Robert R. and Weber, Audrey and Tian, Lu and Zhang, Xiang and
+             Wang, Julie Fangran and Sha, Sharon and Mormino, Elizabeth C. and Wyss-Coray, Tony and
+             Henderson, Victor W. and Longo, Frank M. and Zou, James and Desai, Manisha and Altman, Russ},
+  journal = {bioRxiv},
+  year    = {2026},
+  doi     = {10.64898/2026.09.01.748580},
+  url     = {https://doi.org/10.64898/2026.09.01.748580},
+  note    = {Preprint}
+}
+```
+
+The same reference is in [`CITATION.cff`](CITATION.cff), which GitHub's **Cite this repository** button reads.
 
 ---
 

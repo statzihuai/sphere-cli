@@ -1,0 +1,67 @@
+cff-version: 1.2.0
+message: "If you use SPHERE in your research, please cite the preprint listed under preferred-citation."
+title: "SPHERE CLI"
+type: software
+abstract: >-
+  Command-line interface for SPHERE: generate, evaluate and certify
+  privacy-preserving synthetic twins of tabular data in research data
+  pipelines and on HPC clusters (macOS arm64/x86_64, Linux x86_64).
+authors:
+  - family-names: He
+    given-names: Zihuai
+    affiliation: Stanford University
+    email: zihuai@stanford.edu
+url: "https://www.sphereworld.ai"
+repository-code: "https://github.com/statzihuai/sphere-cli"
+repository-artifact: "https://www.npmjs.com/package/sphere-cli"
+keywords:
+  - synthetic data
+  - privacy
+  - tabular data
+  - command-line tool
+  - HPC
+preferred-citation:
+  type: article
+  title: "Unlocking Sensitive Data with SPHERE in the Age of AI"
+  authors:
+    - family-names: He
+      given-names: Zihuai
+    - family-names: Park
+      given-names: Junyoung
+    - family-names: Pulgrossi
+      given-names: Rafael Catoia
+    - family-names: Lee
+      given-names: Justin
+    - family-names: Butler
+      given-names: Robert R.
+      name-suffix: III
+    - family-names: Weber
+      given-names: Audrey
+    - family-names: Tian
+      given-names: Lu
+    - family-names: Zhang
+      given-names: Xiang
+    - family-names: Wang
+      given-names: Julie Fangran
+    - family-names: Sha
+      given-names: Sharon
+    - family-names: Mormino
+      given-names: Elizabeth C.
+    - family-names: Wyss-Coray
+      given-names: Tony
+    - family-names: Henderson
+      given-names: Victor W.
+    - family-names: Longo
+      given-names: Frank M.
+    - family-names: Zou
+      given-names: James
+    - family-names: Desai
+      given-names: Manisha
+    - family-names: Altman
+      given-names: Russ
+  journal: bioRxiv
+  status: preprint
+  date-published: "2026-09-05"
+  year: 2026
+  doi: "10.64898/2026.09.01.748580"
+  url: "https://doi.org/10.64898/2026.09.01.748580"
