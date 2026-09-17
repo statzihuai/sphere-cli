@@ -71,7 +71,7 @@ sphere certify real.csv synth.csv -o report.html
 On the very first invocation the CLI cold-loads its bundled Python libraries (pandas, pyarrow, anonymeter, sklearn) from disk. On Apple Silicon this typically takes **15–25 seconds**, shown in the progress bar as each library finishes:
 
 ```
-Generating a SPHERE twin from nhanes_sample.csv …
+Generating synthetic data from nhanes_sample.csv …
   [░░░░░░░░░░░░░░░░░]   0.0%  loading pandas . .
   [█░░░░░░░░░░░░░░░░]   3.0%  ✓ pandas  (12.4 s)
   [██░░░░░░░░░░░░░░░]   6.0%  ✓ pyarrow  (3.1 s)
