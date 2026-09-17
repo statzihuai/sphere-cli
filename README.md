@@ -8,7 +8,7 @@
 
 [Website](https://www.sphereworld.ai/?ref=github-sphere-cli) · [npm package](https://www.npmjs.com/package/sphere-cli) · [Latest release](https://github.com/statzihuai/sphere-cli/releases/latest) · [Preprint](https://doi.org/10.64898/2026.09.01.748580) · [Commands](#commands) · [Validation](https://www.sphereworld.ai/validation/?ref=github-sphere-cli) · [SPHERE World catalog](https://sphere-world.vercel.app)
 
-Command-line interface for **SPHERE** — synthetic data generation, evaluation, and certification. Designed for research data pipelines, scripted analyses, and HPC environments.
+Command-line interface for **SPHERE** — SPHERE twin generation, evaluation, and certification. Designed for research data pipelines, scripted analyses, and HPC environments.
 
 Free for non-commercial academic research; commercial use requires a separate written license — see [License](#license).
 
@@ -54,7 +54,7 @@ sphere demo
 # Activate your license (once; required for generate/evaluate/certify)
 sphere license activate sphere_xxxxxxxxxxxxxxxxxxxx
 
-# Generate synthetic data
+# Generate a SPHERE twin
 sphere generate real.csv -o synth.csv
 
 # Evaluate fidelity and privacy
@@ -71,7 +71,7 @@ sphere certify real.csv synth.csv -o report.html
 On the very first invocation the CLI cold-loads its bundled Python libraries (pandas, pyarrow, anonymeter, sklearn) from disk. On Apple Silicon this typically takes **15–25 seconds**, shown in the progress bar as each library finishes:
 
 ```
-Generating synthetic data from nhanes_sample.csv …
+Generating a SPHERE twin from nhanes_sample.csv …
   [░░░░░░░░░░░░░░░░░]   0.0%  loading pandas . .
   [█░░░░░░░░░░░░░░░░]   3.0%  ✓ pandas  (12.4 s)
   [██░░░░░░░░░░░░░░░]   6.0%  ✓ pyarrow  (3.1 s)
@@ -123,7 +123,7 @@ Options:
   --json                   Machine-readable JSON output
 ```
 
-The synthetic output has the **same number of rows** as the input (SPHERE transforms the data in place). Integer-coded categorical columns (≤ 10 distinct values, e.g. 0/1 flags or small ordinal scales) are preserved as exact discrete values; continuous columns are transformed while preserving the covariance structure. A `.sphere.json` provenance file is written alongside every output CSV and is read automatically by `sphere certify`.
+The SPHERE twin has the **same number of rows** as the input (SPHERE transforms the data in place). Integer-coded categorical columns (≤ 10 distinct values, e.g. 0/1 flags or small ordinal scales) are preserved as exact discrete values; continuous columns are transformed while preserving the covariance structure. A `.sphere.json` provenance file is written alongside every output CSV and is read automatically by `sphere certify`.
 
 ### `sphere evaluate`
 
